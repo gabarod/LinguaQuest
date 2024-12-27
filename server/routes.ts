@@ -4,7 +4,7 @@ import { setupAuth } from "./auth";
 import { db } from "@db";
 import { sql } from "drizzle-orm";
 import { lessons, exercises, userProgress, userStats, milestones, userMilestones, dailyChallenges, userChallengeAttempts, users } from "@db/schema";
-import { eq, and, gte, lte } from "drizzle-orm";
+import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { format, subDays } from "date-fns";
 import { ChatService } from "./services/chatService";
 import { BuddyService } from "./services/buddyService";
@@ -407,7 +407,7 @@ export function registerRoutes(app: Express): Server {
         .from(userChallengeAttempts)
         .innerJoin(users, eq(users.id, userChallengeAttempts.userId))
         .where(eq(userChallengeAttempts.challengeId, challengeId))
-        .orderBy(userChallengeAttempts.score, 'desc')
+        .orderBy(desc(userChallengeAttempts.score))
         .limit(10);
 
       res.json(leaderboard);
@@ -430,9 +430,9 @@ export function registerRoutes(app: Express): Server {
           streak: userStats.streak,
           globalRank: userStats.globalRank,
         })
-        .from(users)
-        .innerJoin(userStats, eq(users.id, userStats.userId))
-        .orderBy(userStats.totalPoints, 'desc')
+        .from(userStats)
+        .innerJoin(users, eq(users.id, userStats.userId))
+        .orderBy(desc(userStats.totalPoints))
         .limit(100);
 
       res.json(leaderboard);
@@ -462,9 +462,9 @@ export function registerRoutes(app: Express): Server {
           xp: xpField,
           rank: rankingQuery,
         })
-        .from(users)
-        .innerJoin(userStats, eq(users.id, userStats.userId))
-        .orderBy(xpField, 'desc')
+        .from(userStats)
+        .innerJoin(users, eq(users.id, userStats.userId))
+        .orderBy(desc(xpField))
         .limit(100);
 
       // Get user's position if not in top 100
@@ -481,8 +481,8 @@ export function registerRoutes(app: Express): Server {
         if (userPosition) {
           leaderboard.push({
             id: userId,
-            username: null,
-            xp: null,
+            username: "",
+            xp: 0,
             rank: userPosition.rank,
             isCurrentUser: true,
           });
@@ -493,6 +493,79 @@ export function registerRoutes(app: Express): Server {
     } catch (error) {
       console.error(`Error fetching ${period} leaderboard:`, error);
       res.status(500).send("Failed to fetch leaderboard");
+    }
+  });
+
+  // New endpoint: Progress Statistics
+  app.get("/api/progress/stats", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    try {
+      // Get weekly progress
+      const weeklyProgress = await Promise.all(
+        Array.from({ length: 7 }, (_, i) => {
+          const date = subDays(new Date(), i);
+          return db
+            .select({
+              points: sql<number>`coalesce(sum(${lessons.points}), 0)`,
+              exercises: sql<number>`count(*)`,
+            })
+            .from(userProgress)
+            .leftJoin(lessons, eq(lessons.id, userProgress.lessonId))
+            .where(
+              and(
+                eq(userProgress.userId, userId),
+                sql`date(${userProgress.completedAt}) = ${format(date, 'yyyy-MM-dd')}`
+              )
+            )
+            .then(([result]) => ({
+              date: format(date, 'yyyy-MM-dd'),
+              points: result?.points || 0,
+              exercises: result?.exercises || 0,
+            }));
+        })
+      );
+
+      // Get skill distribution
+      const skillDistribution = await db
+        .select({
+          name: lessons.type,
+          value: sql<number>`count(*)`,
+        })
+        .from(userProgress)
+        .innerJoin(lessons, eq(lessons.id, userProgress.lessonId))
+        .where(eq(userProgress.userId, userId))
+        .groupBy(lessons.type);
+
+      // Get accuracy statistics
+      const accuracyStats = await db
+        .select({
+          total: sql<number>`count(*)`,
+          correct: sql<number>`sum(case when ${userChallengeAttempts.score} > 0 then 1 else 0 end)`,
+        })
+        .from(userChallengeAttempts)
+        .where(eq(userChallengeAttempts.userId, userId));
+
+      // Get user stats
+      const userStat = await db.query.userStats.findFirst({
+        where: eq(userStats.userId, userId),
+      });
+
+      res.json({
+        weeklyProgress: weeklyProgress.reverse(),
+        skillDistribution,
+        totalPoints: userStat?.totalPoints || 0,
+        accuracy: accuracyStats[0]?.total > 0 
+          ? (accuracyStats[0].correct / accuracyStats[0].total * 100) 
+          : 0,
+        streak: userStat?.streak || 0,
+      });
+    } catch (error) {
+      console.error("Error fetching progress stats:", error);
+      res.status(500).send("Failed to fetch progress statistics");
     }
   });
 
