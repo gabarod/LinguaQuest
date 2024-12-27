@@ -39,8 +39,8 @@ export const exercises = pgTable("exercises", {
   question: text("question").notNull(),
   options: text("options").array(),
   correctAnswer: text("correct_answer").notNull(),
-  difficulty: decimal("difficulty").notNull().default("1.0"), // Scale from 0.0 to 2.0
-  skillType: text("skill_type").notNull(), // vocabulary, grammar, pronunciation, comprehension
+  difficulty: decimal("difficulty").notNull().default("1.0"), 
+  skillType: text("skill_type").notNull(), 
   adaptiveFactors: json("adaptive_factors").$type<{
     timeWeight: number;
     accuracyWeight: number;
@@ -145,7 +145,7 @@ export const performanceMetrics = pgTable("performance_metrics", {
     .notNull()
     .references(() => exercises.id),
   accuracy: decimal("accuracy").notNull(),
-  responseTime: integer("response_time").notNull(), // in milliseconds
+  responseTime: integer("response_time").notNull(), 
   attemptCount: integer("attempt_count").notNull(),
   timestamp: timestamp("timestamp").defaultNow(),
 });
@@ -155,7 +155,7 @@ export const difficultyPreferences = pgTable("difficulty_preferences", {
     .notNull()
     .references(() => users.id)
     .primaryKey(),
-  preferredLevel: text("preferred_level").notNull(), // beginner, intermediate, advanced
+  preferredLevel: text("preferred_level").notNull(), 
   adaptiveMode: boolean("adaptive_mode").default(true),
   lastAdjustment: timestamp("last_adjustment").defaultNow(),
   skillLevels: json("skill_levels").$type<{
@@ -174,7 +174,7 @@ export const buddyConnections = pgTable("buddy_connections", {
   buddyId: integer("buddy_id")
     .notNull()
     .references(() => users.id),
-  status: text("status").notNull(), // pending, accepted, rejected
+  status: text("status").notNull(), 
   languageInterest: text("language_interest").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -191,9 +191,9 @@ export const practiceSessions = pgTable("practice_sessions", {
     .notNull()
     .references(() => users.id),
   language: text("language").notNull(),
-  status: text("status").notNull(), // scheduled, ongoing, completed, cancelled
+  status: text("status").notNull(), 
   scheduledFor: timestamp("scheduled_for"),
-  duration: integer("duration"), // in minutes
+  duration: integer("duration"), 
   topic: text("topic"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -210,9 +210,9 @@ export const sessionFeedback = pgTable("session_feedback", {
   receiverId: integer("receiver_id")
     .notNull()
     .references(() => users.id),
-  rating: integer("rating").notNull(), // 1-5 stars
+  rating: integer("rating").notNull(), 
   feedback: text("feedback"),
-  helpfulness: integer("helpfulness").notNull(), // 1-5 scale
+  helpfulness: integer("helpfulness").notNull(), 
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -228,7 +228,7 @@ export const flashcards = pgTable("flashcards", {
   difficulty: decimal("difficulty").notNull().default("1.0"),
   lastReviewed: timestamp("last_reviewed"),
   nextReview: timestamp("next_review"),
-  proficiency: integer("proficiency").default(0), // 0-5 scale
+  proficiency: integer("proficiency").default(0),
   language: text("language").notNull(),
   tags: text("tags").array(),
   createdAt: timestamp("created_at").defaultNow(),
@@ -243,7 +243,7 @@ export const flashcardProgress = pgTable("flashcard_progress", {
     .notNull()
     .references(() => flashcards.id),
   correct: boolean("correct").notNull(),
-  responseTime: integer("response_time"), // in milliseconds
+  responseTime: integer("response_time"),
   reviewedAt: timestamp("reviewed_at").defaultNow(),
 });
 

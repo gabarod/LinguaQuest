@@ -12,6 +12,11 @@ import multer from "multer";
 import { Readable } from "stream";
 import { pipeline } from "stream/promises";
 
+// Add logging for flashcard operations
+const logFlashcardOperation = (operation: string, details: any) => {
+  console.log(`[Flashcard ${operation}]:`, JSON.stringify(details, null, 2));
+};
+
 export function registerRoutes(app: Express): Server {
   setupAuth(app);
 
@@ -914,7 +919,8 @@ export function registerRoutes(app: Express): Server {
     }
 
     try {
-      // Call Perplexity AI to analyze text and generate flashcards
+      logFlashcardOperation("generation-start", { userId, language, count });
+
       const response = await fetch("https://api.perplexity.ai/chat/completions", {
         method: "POST",
         headers: {
@@ -943,17 +949,19 @@ export function registerRoutes(app: Express): Server {
       });
 
       if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
+        const error = await response.text();
+        logFlashcardOperation("api-error", { status: response.status, error });
+        throw new Error(`API error: ${response.status} - ${error}`);
       }
 
       const data = await response.json();
       const flashcardsData = JSON.parse(data.choices[0].message.content);
+      logFlashcardOperation("api-response", { count: flashcardsData.length });
 
       // Save generated flashcards to database
       const savedFlashcards = await Promise.all(
         flashcardsData.map(async (card: any) => {
-          const [savedCard] = await db
-            .insert(flashcards)
+          const [savedCard] = await db            .insert(flashcards)
             .values({
               userId,
               term: card.term,
@@ -962,7 +970,7 @@ export function registerRoutes(app: Express): Server {
               examples: card.examples,
               language,
               tags: card.tags || [],
-              nextReview: new Date(Date.now() + 24 * 60 * 60 * 1000), // Review in 24 hours
+              nextReview: new Date(Date.now() + 24 * 60 * 60 * 1000),
               proficiency: 0,
               lastReviewed: null
             })
@@ -971,8 +979,10 @@ export function registerRoutes(app: Express): Server {
         })
       );
 
+      logFlashcardOperation("generation-complete", { count: savedFlashcards.length });
       res.json(savedFlashcards);
     } catch (error) {
+      logFlashcardOperation("error", { error: error instanceof Error ? error.message : "Unknown error" });
       console.error("Error generating flashcards:", error);
       res.status(500).send("Failed to generate flashcards");
     }
