@@ -8,6 +8,7 @@ import AuthPage from "./pages/AuthPage";
 import HomePage from "./pages/HomePage";
 import LessonPage from "./pages/LessonPage";
 import GamesPage from "./pages/GamesPage";
+import LeaderboardPage from "./pages/LeaderboardPage";
 import { OnboardingTutorial } from "./components/OnboardingTutorial";
 
 function App() {
@@ -31,6 +32,7 @@ function App() {
       <Route path="/" component={HomePage} />
       <Route path="/lesson/:id" component={LessonPage} />
       <Route path="/games" component={GamesPage} />
+      <Route path="/leaderboard" component={LeaderboardPage} />
     </Switch>
   );
 }
