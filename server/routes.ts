@@ -848,6 +848,59 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Get weekly challenge leaderboard
+  app.get("/api/leaderboard/weekly-challenge", async (req, res) => {
+    try {
+      const startOfWeek = new Date();
+      startOfWeek.setHours(0, 0, 0, 0);
+      startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+
+      const leaderboard = await db
+        .select({
+          id: users.id,
+          username: users.username,
+          weeklyXP: userStats.weeklyXP,
+          weeklyRank: sql<number>`rank() over (order by ${userStats.weeklyXP} desc)`,
+          challengesCompleted: sql<number>`count(distinct ${userChallengeAttempts.challengeId})`,
+          averageScore: sql<number>`avg(${userChallengeAttempts.score})`,
+        })
+        .from(userStats)
+        .innerJoin(users, eq(users.id, userStats.userId))
+        .leftJoin(
+          userChallengeAttempts,
+          and(
+            eq(userChallengeAttempts.userId, users.id),
+            gte(userChallengeAttempts.completedAt, startOfWeek)
+          )
+        )
+        .groupBy(users.id, users.username, userStats.weeklyXP)
+        .orderBy(desc(userStats.weeklyXP))
+        .limit(100);
+
+      res.json(leaderboard);
+    } catch (error) {
+      console.error("Error fetching weekly challenge leaderboard:", error);
+      res.status(500).send("Failed to fetch weekly challenge leaderboard");
+    }
+  });
+
+  // Reset weekly XP at the start of each week
+  app.post("/api/leaderboard/weekly-reset", async (req, res) => {
+    try {
+      await db
+        .update(userStats)
+        .set({
+          weeklyXP: 0,
+          lastWeeklyReset: new Date(),
+        });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error resetting weekly XP:", error);
+      res.status(500).send("Failed to reset weekly XP");
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
