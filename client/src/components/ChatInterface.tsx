@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Loader2, Languages } from "lucide-react";
+import { Send, Loader2, Languages, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -26,6 +26,12 @@ interface Message {
   isUser: boolean;
 }
 
+interface ConversationStarter {
+  topic: string;
+  prompt: string;
+  difficulty: "beginner" | "intermediate" | "advanced";
+}
+
 export function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputMessage, setInputMessage] = useState("");
@@ -41,6 +47,12 @@ export function ChatInterface() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Fetch conversation starters
+  const { data: conversationStarters } = useQuery<ConversationStarter[]>({
+    queryKey: ["/api/chat/starters", selectedLanguage],
+    enabled: !!selectedLanguage,
+  });
 
   const chatMutation = useMutation({
     mutationFn: async (message: string) => {
@@ -72,19 +84,19 @@ export function ChatInterface() {
     },
   });
 
-  const handleSendMessage = async () => {
-    if (!inputMessage.trim()) return;
+  const handleSendMessage = async (content: string = inputMessage) => {
+    if (!content.trim()) return;
 
     const newMessage: Message = {
       id: Date.now().toString(),
-      content: inputMessage,
+      content,
       isUser: true,
     };
 
     setMessages((prev) => [...prev, newMessage]);
     setInputMessage("");
-    
-    chatMutation.mutate(inputMessage);
+
+    chatMutation.mutate(content);
   };
 
   return (
@@ -92,68 +104,96 @@ export function ChatInterface() {
       <CardHeader>
         <CardTitle>Practice Conversation</CardTitle>
         <CardDescription>Chat with an AI language tutor to improve your skills</CardDescription>
-        <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
-          <SelectTrigger className="w-[200px]">
-            <SelectValue placeholder="Select language" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="Spanish">Spanish</SelectItem>
-            <SelectItem value="French">French</SelectItem>
-            <SelectItem value="German">German</SelectItem>
-            <SelectItem value="Italian">Italian</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex gap-4 items-center">
+          <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
+            <SelectTrigger className="w-[200px]">
+              <SelectValue placeholder="Select language" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Spanish">Spanish</SelectItem>
+              <SelectItem value="French">French</SelectItem>
+              <SelectItem value="German">German</SelectItem>
+              <SelectItem value="Italian">Italian</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </CardHeader>
       <CardContent>
-        <div className="h-[400px] overflow-y-auto mb-4 space-y-4">
-          <AnimatePresence>
-            {messages.map((message) => (
-              <motion.div
-                key={message.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                className={`flex ${message.isUser ? "justify-end" : "justify-start"}`}
-              >
-                <div
-                  className={`max-w-[80%] p-3 rounded-lg ${
-                    message.isUser
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted"
-                  }`}
-                >
-                  <p className="whitespace-pre-wrap">{message.content}</p>
-                </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-          <div ref={messagesEndRef} />
-        </div>
+        <div className="space-y-4">
+          {conversationStarters && conversationStarters.length > 0 && messages.length === 0 && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-primary" />
+                Suggested conversation starters:
+              </p>
+              <div className="grid gap-2">
+                {conversationStarters.map((starter) => (
+                  <Button
+                    key={starter.topic}
+                    variant="outline"
+                    className="justify-start h-auto py-2 px-3"
+                    onClick={() => handleSendMessage(starter.prompt)}
+                  >
+                    <div className="text-left">
+                      <p className="font-medium">{starter.topic}</p>
+                      <p className="text-sm text-muted-foreground">{starter.prompt}</p>
+                    </div>
+                  </Button>
+                ))}
+              </div>
+            </div>
+          )}
 
-        <div className="flex gap-2">
-          <Textarea
-            value={inputMessage}
-            onChange={(e) => setInputMessage(e.target.value)}
-            placeholder="Type your message..."
-            className="resize-none"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                handleSendMessage();
-              }
-            }}
-          />
-          <Button
-            onClick={handleSendMessage}
-            disabled={chatMutation.isPending}
-            className="px-8"
-          >
-            {chatMutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-          </Button>
+          <div className="h-[400px] overflow-y-auto mb-4 space-y-4">
+            <AnimatePresence>
+              {messages.map((message) => (
+                <motion.div
+                  key={message.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -20 }}
+                  className={`flex ${message.isUser ? "justify-end" : "justify-start"}`}
+                >
+                  <div
+                    className={`max-w-[80%] p-3 rounded-lg ${
+                      message.isUser
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted"
+                    }`}
+                  >
+                    <p className="whitespace-pre-wrap">{message.content}</p>
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+            <div ref={messagesEndRef} />
+          </div>
+
+          <div className="flex gap-2">
+            <Textarea
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              placeholder="Type your message..."
+              className="resize-none"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendMessage();
+                }
+              }}
+            />
+            <Button
+              onClick={() => handleSendMessage()}
+              disabled={chatMutation.isPending}
+              className="px-8"
+            >
+              {chatMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>

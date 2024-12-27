@@ -155,7 +155,7 @@ export const difficultyPreferences = pgTable("difficulty_preferences", {
     .notNull()
     .references(() => users.id)
     .primaryKey(),
-  preferredLevel: text("preferred_level").notNull(), 
+  preferredLevel: text("preferred_level", { enum: ["beginner", "intermediate", "advanced"] }).notNull(), 
   adaptiveMode: boolean("adaptive_mode").default(true),
   lastAdjustment: timestamp("last_adjustment").defaultNow(),
   skillLevels: json("skill_levels").$type<{
@@ -407,3 +407,20 @@ export const selectUserSchema = createSelectSchema(users);
 export type SelectUser = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type User = Omit<SelectUser, "password">;
+
+// Add validation schemas for difficulty preferences
+export const difficultyLevels = ["beginner", "intermediate", "advanced"] as const;
+export type DifficultyLevel = typeof difficultyLevels[number];
+
+export const insertDifficultyPreferencesSchema = createInsertSchema(difficultyPreferences, {
+  preferredLevel: z.enum(difficultyLevels),
+  skillLevels: z.object({
+    vocabulary: z.number().min(0).max(5),
+    grammar: z.number().min(0).max(5),
+    pronunciation: z.number().min(0).max(5),
+    comprehension: z.number().min(0).max(5),
+  }),
+});
+
+export type InsertDifficultyPreferences = z.infer<typeof insertDifficultyPreferencesSchema>;
+export type SelectDifficultyPreferences = typeof difficultyPreferences.$inferSelect;
