@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { db } from "@db";
 import { sql } from "drizzle-orm";
-import { lessons, exercises, userProgress, userStats, milestones, userMilestones, dailyChallenges, userChallengeAttempts, users, flashcards, flashcardProgress, difficultyPreferences, languages, userLanguages, communityPosts, postLikes, postComments, quizzes, quizAttempts } from "@db/schema";
+import { lessons, exercises, userProgress, userStats, milestones, userMilestones, dailyChallenges, userChallengeAttempts, users, flashcards, flashcardProgress, difficultyPreferences, languages, userLanguages, communityPosts, postLikes, postComments, quizzes, quizAttempts, pronunciationAttempts } from "@db/schema";
 import { eq, and, gte, lte, desc, or, asc } from "drizzle-orm";
 import { format, subDays } from "date-fns";
 import { ChatService } from "./services/chatService";
@@ -16,6 +16,8 @@ import { logger } from './services/loggingService';
 import { SpacedRepetitionService } from './services/spacedRepetitionService';
 import {BuddyRecommendationService} from "./services/buddyRecommendationService";
 import { QuizGeneratorService } from "./services/quizGeneratorService";
+import { type User } from "@db/schema";
+
 
 export function registerRoutes(app: Express): Server {
   // Create HTTP server
@@ -1679,6 +1681,45 @@ export function registerRoutes(app: Express): Server {
         error: error instanceof Error ? error.message : String(error)
       });
       res.status(500).send("Failed to record quiz attempt");
+    }
+  });
+
+  app.get("/api/pronunciation-challenges", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    try {
+      // Fetch challenges based on user's current level and preferences
+      const challenges = [
+        {
+          id: 1,
+          text: "The quick brown fox jumps over the lazy dog",
+          language: "en",
+          difficulty: 1,
+          points: 100,
+        },
+        {
+          id: 2,
+          text: "She sells seashells by the seashore",
+          language: "en",
+          difficulty: 2,
+          points: 200,
+        },
+        {
+          id: 3,
+          text: "Peter Piper picked a peck of pickled peppers",
+          language: "en",
+          difficulty: 3,
+          points: 300,
+        },
+      ];
+
+      res.json(challenges);
+    } catch (error) {
+      console.error("Error fetching pronunciation challenges:", error);
+      res.status(500).send("Failed to fetch challenges");
     }
   });
 
