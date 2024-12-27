@@ -4,6 +4,18 @@ import { AlertCircle, Loader2 } from "lucide-react";
 import { useUser } from "@/hooks/use-user";
 import WelcomePage from "./pages/WelcomePage";
 import AuthPage from "./pages/AuthPage";
+import HomePage from "./pages/HomePage";
+import LessonsPage from "./pages/LessonsPage";
+import LessonPage from "./pages/LessonPage";
+import GamesPage from "./pages/GamesPage";
+import LeaderboardPage from "./pages/LeaderboardPage";
+import LanguageExchangePage from "./pages/LanguageExchangePage";
+import CommunityPage from "./pages/CommunityPage";
+import { FlashcardsPage } from "./pages/FlashcardsPage";
+import { OnboardingTutorial } from "./components/OnboardingTutorial";
+import { ProgressCelebration } from "./components/ProgressCelebration";
+import QuizPage from "./pages/QuizPage";
+import PronunciationPractice from "./pages/PronunciationPractice";
 
 function App() {
   const { user, isLoading } = useUser();
@@ -27,18 +39,23 @@ function App() {
   }
 
   return (
-    <Switch>
-      <Route path="/" component={Home} />
-      <Route component={NotFound} />
-    </Switch>
-  );
-}
-
-function Home() {
-  return (
-    <div className="min-h-screen bg-background p-4">
-      <h1 className="text-2xl font-bold">Welcome to LinguaQuest</h1>
-    </div>
+    <>
+      <Switch>
+        <Route path="/onboarding" component={OnboardingTutorial} />
+        <Route path="/" component={HomePage} />
+        <Route path="/lessons" component={LessonsPage} />
+        <Route path="/lesson/:id" component={LessonPage} />
+        <Route path="/flashcards" component={FlashcardsPage} />
+        <Route path="/games" component={GamesPage} />
+        <Route path="/leaderboard" component={LeaderboardPage} />
+        <Route path="/language-exchange" component={LanguageExchangePage} />
+        <Route path="/community" component={CommunityPage} />
+        <Route path="/quiz" component={QuizPage} />
+        <Route path="/pronunciation" component={PronunciationPractice} />
+        <Route component={NotFound} />
+      </Switch>
+      <ProgressCelebration />
+    </>
   );
 }
 

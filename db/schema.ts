@@ -49,6 +49,7 @@ export const userProgress = pgTable("user_progress", {
   lessonId: integer("lesson_id").references(() => lessons.id).notNull(),
   completed: boolean("completed").default(false),
   completedAt: timestamp("completed_at"),
+  score: integer("score").default(0),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -62,12 +63,39 @@ export const userStats = pgTable("user_stats", {
   streak: integer("streak").default(0),
   globalRank: integer("global_rank"),
   lastActivity: timestamp("last_activity").defaultNow(),
+  languageProficiency: text("language_proficiency").default('beginner'),
+});
+
+// Language exchange and practice sessions
+export const practiceSessions = pgTable("practice_sessions", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  partnerId: integer("partner_id").references(() => users.id),
+  scheduledFor: timestamp("scheduled_for").notNull(),
+  duration: integer("duration").notNull(),
+  topic: text("topic"),
+  status: text("status").notNull().default('scheduled'),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Daily challenges and achievements
+export const dailyChallenges = pgTable("daily_challenges", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  type: text("type").notNull(),
+  description: text("description").notNull(),
+  points: integer("points").notNull(),
+  completed: boolean("completed").default(false),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   progress: many(userProgress),
   stats: many(userStats),
+  practiceSessions: many(practiceSessions),
+  dailyChallenges: many(dailyChallenges),
 }));
 
 export const lessonsRelations = relations(lessons, ({ many }) => ({
@@ -89,3 +117,11 @@ export const insertUserSchema = createInsertSchema(users, {
 export const selectUserSchema = createSelectSchema(users);
 export type SelectUser = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
+
+// Additional types for frontend
+export type Lesson = typeof lessons.$inferSelect;
+export type Exercise = typeof exercises.$inferSelect;
+export type UserProgress = typeof userProgress.$inferSelect;
+export type UserStats = typeof userStats.$inferSelect;
+export type PracticeSession = typeof practiceSessions.$inferSelect;
+export type DailyChallenge = typeof dailyChallenges.$inferSelect;
