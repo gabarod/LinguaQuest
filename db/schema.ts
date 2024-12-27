@@ -83,10 +83,6 @@ export const insertUserSchema = createInsertSchema(users, {
 
 export const selectUserSchema = createSelectSchema(users);
 
-export type User = {
-  id: number;
-  username: string;
-  email: string;
-  password: string;
-};
+export type SelectUser = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
+export type User = Omit<SelectUser, "password">;

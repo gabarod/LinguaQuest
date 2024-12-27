@@ -5,9 +5,9 @@ import session from "express-session";
 import createMemoryStore from "memorystore";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
-import { users, type User } from "@db/schema";
+import { users, insertUserSchema, type SelectUser, type User } from "@db/schema";
 import { db } from "@db";
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 
 const scryptAsync = promisify(scrypt);
 const crypto = {
@@ -30,8 +30,7 @@ const crypto = {
 
 declare global {
   namespace Express {
-    // extend the Express.User interface to include our User type
-    interface User extends Omit<User, 'password'> {}
+    interface User extends Omit<SelectUser, "password"> {}
   }
 }
 
@@ -57,10 +56,11 @@ export function setupAuth(app: Express) {
   passport.use(
     new LocalStrategy(async (username, password, done) => {
       try {
+        // Allow login with either username or email
         const [user] = await db
           .select()
           .from(users)
-          .where(eq(users.username, username))
+          .where(or(eq(users.username, username), eq(users.email, username)))
           .limit(1);
 
         if (!user) {
@@ -70,14 +70,14 @@ export function setupAuth(app: Express) {
         if (!isMatch) {
           return done(null, false, { message: "Invalid username or password" });
         }
-        return done(null, { id: user.id, username: user.username });
+        return done(null, { id: user.id, username: user.username, email: user.email });
       } catch (err) {
         return done(err);
       }
     })
   );
 
-  passport.serializeUser((user, done) => {
+  passport.serializeUser((user: Express.User, done) => {
     done(null, user.id);
   });
 
@@ -87,6 +87,7 @@ export function setupAuth(app: Express) {
         .select({
           id: users.id,
           username: users.username,
+          email: users.email,
         })
         .from(users)
         .where(eq(users.id, id))
@@ -99,17 +100,28 @@ export function setupAuth(app: Express) {
 
   app.post("/api/register", async (req, res, next) => {
     try {
-      const { username, password } = req.body;
+      // Validate input
+      const result = insertUserSchema.safeParse(req.body);
+      if (!result.success) {
+        return res
+          .status(400)
+          .send(result.error.errors.map(e => e.message).join(", "));
+      }
 
-      // Check if username already exists
+      const { username, email, password } = result.data;
+
+      // Check if username or email already exists
       const [existingUser] = await db
         .select()
         .from(users)
-        .where(eq(users.username, username))
+        .where(or(eq(users.username, username), eq(users.email, email)))
         .limit(1);
 
       if (existingUser) {
-        return res.status(400).send("Username already exists");
+        if (existingUser.username === username) {
+          return res.status(400).send("Username already exists");
+        }
+        return res.status(400).send("Email already exists");
       }
 
       // Hash password and create user
@@ -118,12 +130,14 @@ export function setupAuth(app: Express) {
         .insert(users)
         .values({
           username,
+          email,
           password: hashedPassword,
         })
         .returning();
 
+      // Log in the new user
       req.login(
-        { id: newUser.id, username: newUser.username },
+        { id: newUser.id, username: newUser.username, email: newUser.email },
         (err) => {
           if (err) {
             return next(err);
@@ -132,6 +146,7 @@ export function setupAuth(app: Express) {
         }
       );
     } catch (error) {
+      console.error("Registration error:", error);
       next(error);
     }
   });
