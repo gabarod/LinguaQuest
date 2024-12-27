@@ -3,11 +3,9 @@ import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { db } from "@db";
 import { sql } from "drizzle-orm";
-import { lessons, exercises, userProgress, userStats, milestones, userMilestones, dailyChallenges, userChallengeAttempts } from "@db/schema";
+import { lessons, exercises, userProgress, userStats, milestones, userMilestones, dailyChallenges, userChallengeAttempts, users } from "@db/schema";
 import { eq, and, gte, lte } from "drizzle-orm";
 import { format, subDays } from "date-fns";
-import { users } from "@db/schema";
-
 
 export function registerRoutes(app: Express): Server {
   setupAuth(app);
@@ -407,7 +405,7 @@ export function registerRoutes(app: Express): Server {
         .from(userChallengeAttempts)
         .innerJoin(users, eq(users.id, userChallengeAttempts.userId))
         .where(eq(userChallengeAttempts.challengeId, challengeId))
-        .orderBy(sql`${userChallengeAttempts.score} DESC`)
+        .orderBy(userChallengeAttempts.score, 'desc')
         .limit(10);
 
       res.json(leaderboard);
@@ -432,7 +430,7 @@ export function registerRoutes(app: Express): Server {
         })
         .from(users)
         .innerJoin(userStats, eq(users.id, userStats.userId))
-        .orderBy(sql`${userStats.totalPoints} DESC`)
+        .orderBy(userStats.totalPoints, 'desc')
         .limit(100);
 
       res.json(leaderboard);
@@ -452,21 +450,19 @@ export function registerRoutes(app: Express): Server {
     }
 
     try {
+      const xpField = period === 'weekly' ? userStats.weeklyXP : userStats.monthlyXP;
+      const rankingQuery = sql<number>`rank() over (order by ${xpField} desc)`;
+
       const leaderboard = await db
         .select({
           id: users.id,
           username: users.username,
-          xp: period === 'weekly' ? userStats.weeklyXP : userStats.monthlyXP,
-          rank: sql<number>`rank() over (order by ${
-            period === 'weekly' ? userStats.weeklyXP : userStats.monthlyXP
-          } desc)`,
+          xp: xpField,
+          rank: rankingQuery,
         })
         .from(users)
         .innerJoin(userStats, eq(users.id, userStats.userId))
-        .orderBy(
-          period === 'weekly' ? userStats.weeklyXP : userStats.monthlyXP,
-          'desc'
-        )
+        .orderBy(xpField, 'desc')
         .limit(100);
 
       // Get user's position if not in top 100
@@ -475,9 +471,7 @@ export function registerRoutes(app: Express): Server {
       if (!userRank) {
         const [userPosition] = await db
           .select({
-            rank: sql<number>`rank() over (order by ${
-              period === 'weekly' ? userStats.weeklyXP : userStats.monthlyXP
-            } desc)`,
+            rank: rankingQuery,
           })
           .from(userStats)
           .where(eq(userStats.userId, userId));
@@ -485,7 +479,7 @@ export function registerRoutes(app: Express): Server {
         if (userPosition) {
           leaderboard.push({
             id: userId,
-            username: null, //No username needed, this is just a rank
+            username: null,
             xp: null,
             rank: userPosition.rank,
             isCurrentUser: true,
@@ -508,7 +502,7 @@ export function registerRoutes(app: Express): Server {
     }
 
     try {
-      const [userStats] = await db
+      const userRankings = await db
         .select({
           globalRank: sql<number>`rank() over (order by ${userStats.totalPoints} desc)`,
           weeklyRank: sql<number>`rank() over (order by ${userStats.weeklyXP} desc)`,
@@ -520,7 +514,15 @@ export function registerRoutes(app: Express): Server {
         .from(userStats)
         .where(eq(userStats.userId, userId));
 
-      res.json(userStats);
+      const [rankings] = userRankings;
+      res.json(rankings || {
+        globalRank: 0,
+        weeklyRank: 0,
+        monthlyRank: 0,
+        totalPoints: 0,
+        weeklyXP: 0,
+        monthlyXP: 0,
+      });
     } catch (error) {
       console.error("Error fetching user ranking stats:", error);
       res.status(500).send("Failed to fetch user stats");
