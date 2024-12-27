@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react";
 import { useUser } from "@/hooks/use-user";
 import AuthPage from "./pages/AuthPage";
 import HomePage from "./pages/HomePage";
+import LessonsPage from "./pages/LessonsPage";
 import LessonPage from "./pages/LessonPage";
 import GamesPage from "./pages/GamesPage";
 import LeaderboardPage from "./pages/LeaderboardPage";
@@ -32,6 +33,7 @@ function App() {
       <Switch>
         <Route path="/onboarding" component={OnboardingTutorial} />
         <Route path="/" component={HomePage} />
+        <Route path="/lessons" component={LessonsPage} />
         <Route path="/lesson/:id" component={LessonPage} />
         <Route path="/games" component={GamesPage} />
         <Route path="/leaderboard" component={LeaderboardPage} />

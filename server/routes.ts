@@ -691,7 +691,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-    app.get("/api/buddies/stats", async (req, res) => {
+  app.get("/api/buddies/stats", async (req, res) => {
     const userId = req.user?.id;
     if (!userId) {
       return res.status(401).send("Not authenticated");
