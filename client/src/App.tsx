@@ -3,7 +3,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
 import { Loader2 } from "lucide-react";
-import { useUser } from "./hooks/use-user";
+import { useUser } from "@/hooks/use-user";
 import AuthPage from "./pages/AuthPage";
 import HomePage from "./pages/HomePage";
 import LessonPage from "./pages/LessonPage";
@@ -21,7 +21,7 @@ function App() {
   }
 
   if (!user) {
-    return <OnboardingTutorial />; // Modified to show OnboardingTutorial for new users.
+    return <AuthPage />; // Show auth page for non-authenticated users
   }
 
   return (

@@ -4,10 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useForm } from "react-hook-form";
-import { useUser } from "@/hooks/use-user";
+import { useUser } from "../hooks/use-user";
 import { useToast } from "@/hooks/use-toast";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useLocation } from "wouter";
 
 const authSchema = z.object({
   username: z.string().min(3, "Username must be at least 3 characters").max(20, "Username must be less than 20 characters"),
@@ -24,6 +25,7 @@ const authSchema = z.object({
 export default function AuthPage() {
   const { login, register } = useUser();
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
   const form = useForm({
     resolver: zodResolver(authSchema),
@@ -43,6 +45,12 @@ export default function AuthPage() {
           title: "Error",
           description: result.message,
         });
+      } else {
+        if (!isLogin) {
+          setLocation("/onboarding"); // Redirect to onboarding after successful registration
+        } else {
+          setLocation("/"); // Redirect to home after successful login
+        }
       }
     } catch (error) {
       toast({
