@@ -87,19 +87,6 @@ export const userStats = pgTable("user_stats", {
   lastActivity: timestamp("last_activity").defaultNow(),
 });
 
-// Relations
-export const usersRelations = relations(users, ({ many }) => ({
-  progress: many(userProgress),
-  stats: many(userStats),
-  pronunciationAttempts: many(pronunciationAttempts),
-}));
-
-export const lessonsRelations = relations(lessons, ({ many }) => ({
-  exercises: many(exercises),
-  progress: many(userProgress),
-}));
-
-// Relation declarations (rest from original)
 export const pronunciationAttempts = pgTable("pronunciation_attempts", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id).notNull(),
@@ -113,11 +100,20 @@ export const pronunciationAttempts = pgTable("pronunciation_attempts", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Schema validation for pronunciation attempts (rest from original)
+// Define all relations after all tables are defined
+export const usersRelations = relations(users, ({ many }) => ({
+  progress: many(userProgress),
+  stats: many(userStats),
+}));
+
+export const lessonsRelations = relations(lessons, ({ many }) => ({
+  exercises: many(exercises),
+  progress: many(userProgress),
+}));
+
 export const insertPronunciationAttemptSchema = createInsertSchema(pronunciationAttempts);
 export const selectPronunciationAttemptSchema = createSelectSchema(pronunciationAttempts);
 
-// Supported languages type (rest from original)
 export const supportedLanguages = [
   "en",
   "es",
@@ -128,8 +124,6 @@ export const supportedLanguages = [
 
 export type SupportedLanguage = typeof supportedLanguages[number];
 
-
-// Buddy system tables (rest from original)
 export const buddyConnections = pgTable("buddy_connections", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id).notNull(),
@@ -164,7 +158,6 @@ export const sessionFeedback = pgTable("session_feedback", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Performance tracking and pronunciation specific tables (rest from original)
 export const performanceMetrics = pgTable("performance_metrics", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id).notNull(),
@@ -172,7 +165,6 @@ export const performanceMetrics = pgTable("performance_metrics", {
   score: decimal("score", { precision: 5, scale: 2 }).notNull(),
   timestamp: timestamp("timestamp").defaultNow(),
 });
-
 
 export const difficultyPreferences = pgTable("difficulty_preferences", {
   id: serial("id").primaryKey(),
@@ -182,8 +174,6 @@ export const difficultyPreferences = pgTable("difficulty_preferences", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// Learning content tables (rest from original)
-// Language and localization tables (rest from original)
 export const languages = pgTable("languages", {
   code: text("code").primaryKey(),
   name: text("name").notNull(),
@@ -203,7 +193,6 @@ export const userLanguages = pgTable("user_languages", {
   lastPracticed: timestamp("last_practiced").defaultNow(),
 });
 
-// Community and social features (rest from original)
 export const communityPosts = pgTable("community_posts", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id).notNull(),
@@ -230,7 +219,6 @@ export const postLikes = pgTable("post_likes", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Quiz system (rest from original)
 export const quizzes = pgTable("quizzes", {
   id: serial("id").primaryKey(),
   language: text("language").notNull(),
@@ -250,7 +238,6 @@ export const quizAttempts = pgTable("quiz_attempts", {
   completedAt: timestamp("completed_at").defaultNow(),
 });
 
-// Learning path related tables (rest from original)
 export const learningPaths = pgTable("learning_paths", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id).notNull(),
@@ -284,7 +271,6 @@ export const aiRecommendations = pgTable("ai_recommendations", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Daily challenges and gamification tables (rest from original)
 export const dailyChallenges = pgTable("daily_challenges", {
   id: serial("id").primaryKey(),
   title: text("title").notNull(),
@@ -325,7 +311,6 @@ export const userMilestones = pgTable("user_milestones", {
   unlockedAt: timestamp("unlocked_at").defaultNow(),
 });
 
-// Flashcard system tables (rest from original)
 export const flashcards = pgTable("flashcards", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id).notNull(),
