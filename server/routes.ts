@@ -38,6 +38,7 @@ export function registerRoutes(app: Express): Server {
           language: "english",
           points: 100,
           duration: 15,
+          difficulty: 1,
         },
         {
           title: "Common Phrases",
@@ -47,6 +48,7 @@ export function registerRoutes(app: Express): Server {
           language: "english",
           points: 150,
           duration: 20,
+          difficulty: 1,
         },
         {
           title: "Present Tense",
@@ -56,6 +58,7 @@ export function registerRoutes(app: Express): Server {
           language: "english",
           points: 200,
           duration: 25,
+          difficulty: 1,
         },
       ];
 
@@ -72,7 +75,7 @@ export function registerRoutes(app: Express): Server {
 
       res.json(allLessons);
     } catch (error) {
-      console.error("Error setting up initial lessons:", error);
+      logger.error("Error setting up initial lessons:", error);
       res.status(500).send("Failed to set up initial lessons");
     }
   });
@@ -273,7 +276,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Get user progress
+  // Get progress
   app.get("/api/progress", async (req, res) => {
     const userId = req.user?.id;
     if (!userId) {
@@ -285,12 +288,23 @@ export function registerRoutes(app: Express): Server {
         where: eq(userStats.userId, userId),
       });
 
-      res.json(stats || {
-        lessonsCompleted: 0,
-        totalPoints: 0,
-        streak: 0,
-        lastActivity: new Date(),
-      });
+      if (!stats) {
+        // Create initial stats for new user
+        const [newStats] = await db
+          .insert(userStats)
+          .values({
+            userId,
+            lessonsCompleted: 0,
+            totalPoints: 0,
+            streak: 0,
+            lastActivity: new Date(),
+          })
+          .returning();
+
+        return res.json(newStats);
+      }
+
+      res.json(stats);
     } catch (error) {
       logger.error("Error fetching progress:", error);
       res.status(500).send("Failed to fetch progress");
@@ -340,6 +354,26 @@ export function registerRoutes(app: Express): Server {
         where: eq(userStats.userId, userId),
       });
 
+      if (!stats) {
+        // Create initial stats for new user
+        const [newStats] = await db
+          .insert(userStats)
+          .values({
+            userId,
+            lessonsCompleted: 0,
+            totalPoints: 0,
+            streak: 0,
+            lastActivity: new Date(),
+          })
+          .returning();
+
+        return res.json({
+          weeklyProgress: [],
+          skillDistribution: [],
+          ...newStats,
+        });
+      }
+
       res.json({
         weeklyProgress: weeklyProgress.map(wp => ({
           day: format(new Date(wp.day), 'EEE'),
@@ -347,9 +381,9 @@ export function registerRoutes(app: Express): Server {
           exercises: wp.exercises || 0,
         })),
         skillDistribution,
-        totalPoints: stats?.totalPoints || 0,
-        lessonsCompleted: stats?.lessonsCompleted || 0,
-        streak: stats?.streak || 0,
+        totalPoints: stats.totalPoints || 0,
+        lessonsCompleted: stats.lessonsCompleted || 0,
+        streak: stats.streak || 0,
       });
     } catch (error) {
       logger.error("Error fetching detailed progress:", error);

@@ -80,7 +80,7 @@ export const userStats = pgTable("user_stats", {
   streak: integer("streak").default(0),
   globalRank: integer("global_rank"),
   lastActivity: timestamp("last_activity").defaultNow(),
-  languageProficiency: text("language_proficiency").default('beginner'),
+  proficiencyLevel: text("proficiency_level").default('beginner'),
 });
 
 // Daily challenges and achievements

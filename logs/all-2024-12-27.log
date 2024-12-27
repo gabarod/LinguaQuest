@@ -4168,3 +4168,6 @@
 2024-12-27 16:05:48:548 [31merror[39m: [31mError fetching detailed progress: column "language_proficiency" does not exist[39m
 2024-12-27 16:06:04:64 [31merror[39m: [31mError fetching detailed progress: column "language_proficiency" does not exist[39m
 2024-12-27 16:06:06:66 [31merror[39m: [31mError fetching user stats: column "language_proficiency" does not exist[39m
+2024-12-27 16:24:07:247 [31merror[39m: [31mError fetching progress: column "language_proficiency" does not exist[39m
+2024-12-27 16:24:07:247 [31merror[39m: [31mError fetching detailed progress: column "language_proficiency" does not exist[39m
+2024-12-27 16:24:08:248 [31merror[39m: [31mError fetching user stats: column "language_proficiency" does not exist[39m
