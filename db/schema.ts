@@ -87,10 +87,44 @@ export const userMilestones = pgTable("user_milestones", {
   pk: primaryKey({ columns: [table.userId, table.milestoneId] }),
 }));
 
+export const dailyChallenges = pgTable("daily_challenges", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  difficulty: text("difficulty").notNull(),
+  points: integer("points").notNull(),
+  availableFrom: timestamp("available_from", { withTimezone: true }).notNull(),
+  availableUntil: timestamp("available_until", { withTimezone: true }).notNull(),
+  questions: json("questions").$type<{
+    question: string;
+    options: string[];
+    correctAnswer: string;
+  }[]>().notNull(),
+});
+
+export const userChallengeAttempts = pgTable("user_challenge_attempts", {
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  challengeId: integer("challenge_id")
+    .notNull()
+    .references(() => dailyChallenges.id),
+  score: integer("score").default(0),
+  completedAt: timestamp("completed_at", { withTimezone: true }).defaultNow(),
+  answers: json("answers").$type<{
+    questionId: number;
+    answer: string;
+    correct: boolean;
+  }[]>().notNull(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.userId, table.challengeId] }),
+}));
+
 export const userRelations = relations(users, ({ many }) => ({
   progress: many(userProgress),
   stats: many(userStats),
   milestones: many(userMilestones),
+  challengeAttempts: many(userChallengeAttempts),
 }));
 
 export const lessonRelations = relations(lessons, ({ many }) => ({
@@ -138,6 +172,20 @@ export const userMilestoneRelations = relations(userMilestones, ({ one }) => ({
   }),
 }));
 
+export const dailyChallengeRelations = relations(dailyChallenges, ({ many }) => ({
+  attempts: many(userChallengeAttempts),
+}));
+
+export const userChallengeAttemptRelations = relations(userChallengeAttempts, ({ one }) => ({
+  user: one(users, {
+    fields: [userChallengeAttempts.userId],
+    references: [users.id],
+  }),
+  challenge: one(dailyChallenges, {
+    fields: [userChallengeAttempts.challengeId],
+    references: [dailyChallenges.id],
+  }),
+}));
 
 export const insertUserSchema = createInsertSchema(users, {
   email: z.string().email("Invalid email address"),

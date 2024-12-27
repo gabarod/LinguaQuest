@@ -3,9 +3,11 @@ import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { db } from "@db";
 import { sql } from "drizzle-orm";
-import { lessons, exercises, userProgress, userStats, milestones, userMilestones } from "@db/schema";
-import { eq, and } from "drizzle-orm";
+import { lessons, exercises, userProgress, userStats, milestones, userMilestones, dailyChallenges, userChallengeAttempts } from "@db/schema";
+import { eq, and, gte, lte } from "drizzle-orm";
 import { format, subDays } from "date-fns";
+import { users } from "@db/schema";
+
 
 export function registerRoutes(app: Express): Server {
   setupAuth(app);
@@ -281,6 +283,137 @@ export function registerRoutes(app: Express): Server {
     } catch (error) {
       console.error("Error unlocking milestone:", error);
       res.status(500).send("Failed to unlock milestone");
+    }
+  });
+
+
+  // Get today's challenge
+  app.get("/api/challenges/daily", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    try {
+      const now = new Date();
+      const challenge = await db.query.dailyChallenges.findFirst({
+        where: and(
+          lte(dailyChallenges.availableFrom, now),
+          gte(dailyChallenges.availableUntil, now)
+        ),
+      });
+
+      if (!challenge) {
+        return res.status(404).send("No active challenge found");
+      }
+
+      // Check if user has already attempted this challenge
+      const attempt = await db.query.userChallengeAttempts.findFirst({
+        where: and(
+          eq(userChallengeAttempts.userId, userId),
+          eq(userChallengeAttempts.challengeId, challenge.id)
+        ),
+      });
+
+      res.json({
+        ...challenge,
+        completed: !!attempt,
+        score: attempt?.score,
+      });
+    } catch (error) {
+      console.error("Error fetching daily challenge:", error);
+      res.status(500).send("Failed to fetch daily challenge");
+    }
+  });
+
+  // Submit challenge attempt
+  app.post("/api/challenges/:id/attempt", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    const challengeId = parseInt(req.params.id);
+    const { answers } = req.body;
+
+    try {
+      const challenge = await db.query.dailyChallenges.findFirst({
+        where: eq(dailyChallenges.id, challengeId),
+      });
+
+      if (!challenge) {
+        return res.status(404).send("Challenge not found");
+      }
+
+      // Calculate score based on correct answers
+      const scoredAnswers = answers.map((answer: string, index: number) => {
+        const correct = answer === challenge.questions[index].correctAnswer;
+        return {
+          questionId: index,
+          answer,
+          correct,
+        };
+      });
+
+      const score = scoredAnswers.filter((a: { correct: boolean }) => a.correct).length;
+      const totalPoints = score * (challenge.points / challenge.questions.length);
+
+      // Record the attempt
+      await db.transaction(async (tx) => {
+        await tx.insert(userChallengeAttempts).values({
+          userId,
+          challengeId,
+          score: totalPoints,
+          answers: scoredAnswers,
+        });
+
+        // Update user stats
+        await tx
+          .insert(userStats)
+          .values({
+            userId,
+            totalPoints,
+          })
+          .onConflictDoUpdate({
+            target: [userStats.userId],
+            set: {
+              totalPoints: sql`${userStats.totalPoints} + ${totalPoints}`,
+            },
+          });
+      });
+
+      res.json({
+        success: true,
+        score: totalPoints,
+        answers: scoredAnswers,
+      });
+    } catch (error) {
+      console.error("Error submitting challenge attempt:", error);
+      res.status(500).send("Failed to submit challenge attempt");
+    }
+  });
+
+  // Get challenge leaderboard
+  app.get("/api/challenges/:id/leaderboard", async (req, res) => {
+    const challengeId = parseInt(req.params.id);
+
+    try {
+      const leaderboard = await db
+        .select({
+          username: users.username,
+          score: userChallengeAttempts.score,
+          completedAt: userChallengeAttempts.completedAt,
+        })
+        .from(userChallengeAttempts)
+        .innerJoin(users, eq(users.id, userChallengeAttempts.userId))
+        .where(eq(userChallengeAttempts.challengeId, challengeId))
+        .orderBy(sql`${userChallengeAttempts.score} DESC`)
+        .limit(10);
+
+      res.json(leaderboard);
+    } catch (error) {
+      console.error("Error fetching leaderboard:", error);
+      res.status(500).send("Failed to fetch leaderboard");
     }
   });
 
