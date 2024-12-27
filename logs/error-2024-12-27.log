@@ -16,3 +16,8 @@
 2024-12-27 15:48:39:4839 [31merror[39m: [31mError fetching detailed progress: column "language_proficiency" does not exist[39m
 2024-12-27 15:48:39:4839 [31merror[39m: [31mError fetching user stats: column "language_proficiency" does not exist[39m
 2024-12-27 15:48:57:4857 [31merror[39m: [31mError fetching lessons: There is not enough information to infer relation "lessons.progress"[39m
+2024-12-27 15:57:20:5720 [31merror[39m: [31mError fetching lessons: There is not enough information to infer relation "lessons.progress"[39m
+2024-12-27 15:57:20:5720 [31merror[39m: [31mError fetching progress: column "language_proficiency" does not exist[39m
+2024-12-27 15:57:21:5721 [31merror[39m: [31mError fetching detailed progress: column "language_proficiency" does not exist[39m
+2024-12-27 15:57:21:5721 [31merror[39m: [31mError fetching user stats: column "language_proficiency" does not exist[39m
+2024-12-27 15:57:29:5729 [31merror[39m: [31mError fetching lessons: There is not enough information to infer relation "lessons.progress"[39m

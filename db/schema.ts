@@ -46,7 +46,7 @@ export const lessons = pgTable("lessons", {
   language: text("language").notNull(),
   points: integer("points").notNull(),
   difficulty: integer("difficulty").notNull().default(1),
-  duration: integer("duration").notNull().default(30), // duración en minutos
+  duration: integer("duration").notNull().default(30),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -83,18 +83,6 @@ export const userStats = pgTable("user_stats", {
   languageProficiency: text("language_proficiency").default('beginner'),
 });
 
-// Language exchange and practice sessions
-export const practiceSessions = pgTable("practice_sessions", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id").references(() => users.id).notNull(),
-  partnerId: integer("partner_id").references(() => users.id),
-  scheduledFor: timestamp("scheduled_for").notNull(),
-  duration: integer("duration").notNull(),
-  topic: text("topic"),
-  status: text("status").notNull().default('scheduled'),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
 // Daily challenges and achievements
 export const dailyChallenges = pgTable("daily_challenges", {
   id: serial("id").primaryKey(),
@@ -108,16 +96,29 @@ export const dailyChallenges = pgTable("daily_challenges", {
 });
 
 // Relations
+export const lessonsRelations = relations(lessons, ({ many }) => ({
+  exercises: many(exercises),
+  progress: many(userProgress, {
+    fields: [lessons.id],
+    references: [userProgress.lessonId],
+  }),
+}));
+
+export const userProgressRelations = relations(userProgress, ({ one }) => ({
+  user: one(users, {
+    fields: [userProgress.userId],
+    references: [users.id],
+  }),
+  lesson: one(lessons, {
+    fields: [userProgress.lessonId],
+    references: [lessons.id],
+  }),
+}));
+
 export const usersRelations = relations(users, ({ many }) => ({
   progress: many(userProgress),
   stats: many(userStats),
-  practiceSessions: many(practiceSessions),
   dailyChallenges: many(dailyChallenges),
-}));
-
-export const lessonsRelations = relations(lessons, ({ many }) => ({
-  exercises: many(exercises),
-  progress: many(userProgress),
 }));
 
 // Schemas for validation
@@ -142,5 +143,4 @@ export type Lesson = typeof lessons.$inferSelect;
 export type Exercise = typeof exercises.$inferSelect;
 export type UserProgress = typeof userProgress.$inferSelect;
 export type UserStats = typeof userStats.$inferSelect;
-export type PracticeSession = typeof practiceSessions.$inferSelect;
 export type DailyChallenge = typeof dailyChallenges.$inferSelect;
