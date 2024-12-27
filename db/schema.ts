@@ -5,7 +5,7 @@ import {
   integer,
   boolean,
   timestamp,
-  foreignKey,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { relations } from "drizzle-orm";
@@ -30,7 +30,9 @@ export const lessons = pgTable("lessons", {
 
 export const exercises = pgTable("exercises", {
   id: serial("id").primaryKey(),
-  lessonId: integer("lesson_id").notNull().references(() => lessons.id),
+  lessonId: integer("lesson_id")
+    .notNull()
+    .references(() => lessons.id),
   type: text("type").notNull(),
   question: text("question").notNull(),
   options: text("options").array(),
@@ -38,7 +40,6 @@ export const exercises = pgTable("exercises", {
 });
 
 export const userProgress = pgTable("user_progress", {
-  id: serial("id").primaryKey(),
   userId: integer("user_id")
     .notNull()
     .references(() => users.id),
@@ -47,29 +48,58 @@ export const userProgress = pgTable("user_progress", {
     .references(() => lessons.id),
   completed: boolean("completed").default(false),
   completedAt: timestamp("completed_at"),
-});
+}, (table) => ({
+  pk: primaryKey({ columns: [table.userId, table.lessonId] }),
+}));
 
 export const userStats = pgTable("user_stats", {
-  id: serial("id").primaryKey(),
   userId: integer("user_id")
     .notNull()
-    .references(() => users.id),
+    .references(() => users.id)
+    .primaryKey(),
   lessonsCompleted: integer("lessons_completed").default(0),
   totalPoints: integer("total_points").default(0),
   streak: integer("streak").default(0),
   lastActivity: timestamp("last_activity").defaultNow(),
 });
 
-export const lessonRelations = relations(lessons, ({ many }) => ({
-  exercises: many(exercises),
-  userProgress: many(userProgress),
-}));
-
+// Define relationships
 export const userRelations = relations(users, ({ many }) => ({
   progress: many(userProgress),
   stats: many(userStats),
 }));
 
+export const lessonRelations = relations(lessons, ({ many }) => ({
+  exercises: many(exercises),
+  userProgress: many(userProgress),
+}));
+
+export const exerciseRelations = relations(exercises, ({ one }) => ({
+  lesson: one(lessons, {
+    fields: [exercises.lessonId],
+    references: [lessons.id],
+  }),
+}));
+
+export const userProgressRelations = relations(userProgress, ({ one }) => ({
+  user: one(users, {
+    fields: [userProgress.userId],
+    references: [users.id],
+  }),
+  lesson: one(lessons, {
+    fields: [userProgress.lessonId],
+    references: [lessons.id],
+  }),
+}));
+
+export const userStatsRelations = relations(userStats, ({ one }) => ({
+  user: one(users, {
+    fields: [userStats.userId],
+    references: [users.id],
+  }),
+}));
+
+// Schema validation
 export const insertUserSchema = createInsertSchema(users, {
   email: z.string().email("Invalid email address"),
   password: z
