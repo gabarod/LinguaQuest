@@ -1,7 +1,7 @@
 import { WebSocket, WebSocketServer } from 'ws';
 import type { Server } from 'http';
 import { db } from '@db';
-import { users, buddyConnections } from '@db/schema';
+import { users } from '@db/schema';
 import { eq } from 'drizzle-orm';
 import { logger } from './loggingService';
 
@@ -163,7 +163,7 @@ export class LanguageExchangeService {
     });
 
     // Find a matching partner with similar proficiency level
-    for (const [partnerId, partner] of this.connectedUsers.entries()) {
+    for (const [partnerId, partner] of this.connectedUsers) {
       if (
         partnerId !== userId &&
         partner.searching &&
