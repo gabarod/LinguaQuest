@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { db } from "@db";
 import { sql } from "drizzle-orm";
-import { lessons, exercises, userProgress, userStats, milestones, userMilestones, dailyChallenges, userChallengeAttempts, users, flashcards, flashcardProgress, difficultyPreferences, languages, userLanguages, communityPosts, postLikes, postComments } from "@db/schema";
+import { lessons, exercises, userProgress, userStats, milestones, userMilestones, dailyChallenges, userChallengeAttempts, users, flashcards, flashcardProgress, difficultyPreferences, languages, userLanguages, communityPosts, postLikes, postComments, quizzes, quizAttempts } from "@db/schema";
 import { eq, and, gte, lte, desc, or, asc } from "drizzle-orm";
 import { format, subDays } from "date-fns";
 import { ChatService } from "./services/chatService";
@@ -15,7 +15,7 @@ import learningPathRouter from "./routes/learningPath";
 import { logger } from './services/loggingService';
 import { SpacedRepetitionService } from './services/spacedRepetitionService';
 import {BuddyRecommendationService} from "./services/buddyRecommendationService";
-
+import { QuizGeneratorService } from "./services/quizGeneratorService";
 
 export function registerRoutes(app: Express): Server {
   // Create HTTP server
@@ -1561,6 +1561,124 @@ export function registerRoutes(app: Express): Server {
         timestamp: new Date()
       });
       res.status(500).send("Failed to create comment");
+    }
+  });
+
+  // Quiz routes
+  app.post("/api/quizzes/generate", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    const { language } = req.body;
+
+    try {
+      // Get adaptive parameters based on user's performance
+      const params = await QuizGeneratorService.getAdaptiveQuizParameters(userId, language);
+
+      // Generate a new quiz
+      const quiz = await QuizGeneratorService.createQuiz(
+        language,
+        params.difficulty,
+        params.type
+      );
+
+      logger.info('Generated new quiz', {
+        userId,
+        quizId: quiz.id,
+        language,
+        difficulty: params.difficulty,
+        type: params.type
+      });
+
+      res.json(quiz);
+    } catch (error) {
+      logger.error('Error generating quiz', {
+        userId,
+        language,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      res.status(500).send("Failed to generate quiz");
+    }
+  });
+
+  app.get("/api/quizzes/:id", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    try {
+      const quiz = await db.query.quizzes.findFirst({
+        where: eq(quizzes.id, parseInt(req.params.id)),
+      });
+
+      if (!quiz) {
+        return res.status(404).send("Quiz not found");
+      }
+
+      res.json(quiz);
+    } catch (error) {
+      logger.error('Error fetching quiz', {
+        userId,
+        quizId: req.params.id,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      res.status(500).send("Failed to fetch quiz");
+    }
+  });
+
+  app.post("/api/quizzes/:id/attempt", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    const quizId = parseInt(req.params.id);
+    const { answers, score } = req.body;
+
+    try {
+      const quiz = await db.query.quizzes.findFirst({
+        where: eq(quizzes.id, quizId),
+      });
+
+      if (!quiz) {
+        return res.status(404).send("Quiz not found");
+      }
+
+      const maxScore = quiz.questions.reduce(
+        (sum, q) => sum + q.points,
+        0
+      );
+
+      const [attempt] = await db
+        .insert(quizAttempts)
+        .values({
+          userId,
+          quizId,
+          score,
+          maxScore,
+          answers,
+        })
+        .returning();
+
+      logger.info('Recorded quiz attempt', {
+        userId,
+        quizId,
+        attemptId: attempt.id,
+        score,
+        maxScore
+      });
+
+      res.json(attempt);
+    } catch (error) {
+      logger.error('Error recording quiz attempt', {
+        userId,
+        quizId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      res.status(500).send("Failed to record quiz attempt");
     }
   });
 

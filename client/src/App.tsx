@@ -15,6 +15,7 @@ import CommunityPage from "./pages/CommunityPage";
 import { FlashcardsPage } from "./pages/FlashcardsPage";
 import { OnboardingTutorial } from "./components/OnboardingTutorial";
 import { ProgressCelebration } from "./components/ProgressCelebration";
+import QuizPage from "./pages/QuizPage";
 
 function App() {
   const { user, isLoading } = useUser();
@@ -28,7 +29,7 @@ function App() {
   }
 
   if (!user) {
-    return <AuthPage />; // Show auth page for non-authenticated users
+    return <AuthPage />;
   }
 
   return (
@@ -43,6 +44,7 @@ function App() {
         <Route path="/leaderboard" component={LeaderboardPage} />
         <Route path="/language-exchange" component={LanguageExchangePage} />
         <Route path="/community" component={CommunityPage} />
+        <Route path="/quiz" component={QuizPage} />
       </Switch>
       <ProgressCelebration />
     </>

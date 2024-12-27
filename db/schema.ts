@@ -355,7 +355,6 @@ export const skillProgression = pgTable("skill_progression", {
   }[]>().default([]),
 });
 
-
 export const userRelations = relations(users, ({ many }) => ({
   progress: many(userProgress),
   stats: many(userStats),
@@ -684,5 +683,61 @@ export const postLikeRelations = relations(postLikes, ({ one }) => ({
   user: one(users, {
     fields: [postLikes.userId],
     references: [users.id],
+  }),
+}));
+
+export const quizzes = pgTable("quizzes", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  language: text("language")
+    .notNull()
+    .references(() => languages.code),
+  difficulty: text("difficulty").notNull(),
+  type: text("type").notNull(), // vocabulary, grammar, comprehension, etc.
+  questions: json("questions").$type<{
+    id: number;
+    question: string;
+    options: string[];
+    correctAnswer: string;
+    explanation: string;
+    points: number;
+  }[]>().notNull(),
+  timeLimit: integer("time_limit"), // in seconds
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const quizAttempts = pgTable("quiz_attempts", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  quizId: integer("quiz_id")
+    .notNull()
+    .references(() => quizzes.id),
+  score: integer("score").notNull(),
+  maxScore: integer("max_score").notNull(),
+  answers: json("answers").$type<{
+    questionId: number;
+    answer: string;
+    correct: boolean;
+    timeSpent: number;
+  }[]>().notNull(),
+  completedAt: timestamp("completed_at").defaultNow(),
+});
+
+export const quizzesRelations = relations(quizzes, ({ many }) => ({
+  attempts: many(quizAttempts),
+}));
+
+export const quizAttemptsRelations = relations(quizAttempts, ({ one }) => ({
+  user: one(users, {
+    fields: [quizAttempts.userId],
+    references: [users.id],
+  }),
+  quiz: one(quizzes, {
+    fields: [quizAttempts.quizId],
+    references: [quizzes.id],
   }),
 }));
