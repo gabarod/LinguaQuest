@@ -17,7 +17,17 @@ export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").unique().notNull(),
   email: text("email").unique().notNull(),
-  password: text("password").notNull(),
+  password: text("password"),
+  googleId: text("google_id").unique(),
+  facebookId: text("facebook_id").unique(),
+  avatar: text("avatar"),
+  isEmailVerified: boolean("is_email_verified").default(false),
+  resetPasswordToken: text("reset_password_token").unique(),
+  resetPasswordExpires: timestamp("reset_password_expires"),
+  rememberMeToken: text("remember_me_token").unique(),
+  lastLoginAt: timestamp("last_login_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export const lessons = pgTable("lessons", {
@@ -39,8 +49,8 @@ export const exercises = pgTable("exercises", {
   question: text("question").notNull(),
   options: text("options").array(),
   correctAnswer: text("correct_answer").notNull(),
-  difficulty: decimal("difficulty").notNull().default("1.0"), 
-  skillType: text("skill_type").notNull(), 
+  difficulty: decimal("difficulty").notNull().default("1.0"),
+  skillType: text("skill_type").notNull(),
   adaptiveFactors: json("adaptive_factors").$type<{
     timeWeight: number;
     accuracyWeight: number;
@@ -145,7 +155,7 @@ export const performanceMetrics = pgTable("performance_metrics", {
     .notNull()
     .references(() => exercises.id),
   accuracy: decimal("accuracy").notNull(),
-  responseTime: integer("response_time").notNull(), 
+  responseTime: integer("response_time").notNull(),
   attemptCount: integer("attempt_count").notNull(),
   timestamp: timestamp("timestamp").defaultNow(),
 });
@@ -155,7 +165,7 @@ export const difficultyPreferences = pgTable("difficulty_preferences", {
     .notNull()
     .references(() => users.id)
     .primaryKey(),
-  preferredLevel: text("preferred_level", { enum: ["beginner", "intermediate", "advanced"] }).notNull(), 
+  preferredLevel: text("preferred_level", { enum: ["beginner", "intermediate", "advanced"] }).notNull(),
   adaptiveMode: boolean("adaptive_mode").default(true),
   lastAdjustment: timestamp("last_adjustment").defaultNow(),
   skillLevels: json("skill_levels").$type<{
@@ -174,7 +184,7 @@ export const buddyConnections = pgTable("buddy_connections", {
   buddyId: integer("buddy_id")
     .notNull()
     .references(() => users.id),
-  status: text("status").notNull(), 
+  status: text("status").notNull(),
   languageInterest: text("language_interest").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -191,9 +201,9 @@ export const practiceSessions = pgTable("practice_sessions", {
     .notNull()
     .references(() => users.id),
   language: text("language").notNull(),
-  status: text("status").notNull(), 
+  status: text("status").notNull(),
   scheduledFor: timestamp("scheduled_for"),
-  duration: integer("duration"), 
+  duration: integer("duration"),
   topic: text("topic"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -210,9 +220,9 @@ export const sessionFeedback = pgTable("session_feedback", {
   receiverId: integer("receiver_id")
     .notNull()
     .references(() => users.id),
-  rating: integer("rating").notNull(), 
+  rating: integer("rating").notNull(),
   feedback: text("feedback"),
-  helpfulness: integer("helpfulness").notNull(), 
+  helpfulness: integer("helpfulness").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -399,14 +409,15 @@ export const insertUserSchema = createInsertSchema(users, {
     .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
     .regex(/[a-z]/, "Password must contain at least one lowercase letter")
     .regex(/[0-9]/, "Password must contain at least one number")
-    .regex(/[^A-Za-z0-9]/, "Password must contain at least one special character"),
+    .regex(/[^A-Za-z0-9]/, "Password must contain at least one special character")
+    .optional(), // Optional because social login users won't have a password
 });
 
 export const selectUserSchema = createSelectSchema(users);
 
 export type SelectUser = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
-export type User = Omit<SelectUser, "password">;
+export type User = Omit<SelectUser, "password" | "resetPasswordToken" | "resetPasswordExpires" | "rememberMeToken">;
 
 // Add validation schemas for difficulty preferences
 export const difficultyLevels = ["beginner", "intermediate", "advanced"] as const;

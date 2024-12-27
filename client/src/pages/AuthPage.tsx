@@ -1,18 +1,22 @@
+import { useState } from "react";
 import { Form } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useForm } from "react-hook-form";
 import { useUser } from "../hooks/use-user";
 import { useToast } from "@/hooks/use-toast";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useLocation } from "wouter";
+import { SiGoogle, SiFacebook } from "react-icons/si";
 
 const loginSchema = z.object({
   username: z.string().min(1, "Username or email is required"),
   password: z.string().min(1, "Password is required"),
+  rememberMe: z.boolean().default(false),
 });
 
 const registerSchema = z.object({
@@ -33,12 +37,15 @@ export default function AuthPage() {
   const { login, register } = useUser();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
 
   const loginForm = useForm({
     resolver: zodResolver(loginSchema),
     defaultValues: {
       username: "",
       password: "",
+      rememberMe: false,
     },
   });
 
@@ -93,6 +100,34 @@ export default function AuthPage() {
     }
   };
 
+  const handlePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const response = await fetch("/api/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: resetEmail }),
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      toast({
+        title: "Success",
+        description: "If an account exists with this email, you will receive password reset instructions.",
+      });
+      setIsResettingPassword(false);
+      setResetEmail("");
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to send reset email",
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
@@ -106,32 +141,111 @@ export default function AuthPage() {
               <TabsTrigger value="register">Register</TabsTrigger>
             </TabsList>
             <TabsContent value="login">
-              <Form {...loginForm}>
-                <form onSubmit={loginForm.handleSubmit(handleLogin)} className="space-y-4">
-                  <div className="space-y-2">
+              {!isResettingPassword ? (
+                <>
+                  <Form {...loginForm}>
+                    <form onSubmit={loginForm.handleSubmit(handleLogin)} className="space-y-4">
+                      <div className="space-y-2">
+                        <Input
+                          placeholder="Username or Email"
+                          {...loginForm.register("username")}
+                        />
+                        {loginForm.formState.errors.username && (
+                          <p className="text-sm text-red-500">{loginForm.formState.errors.username.message}</p>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        <Input
+                          type="password"
+                          placeholder="Password"
+                          {...loginForm.register("password")}
+                        />
+                        {loginForm.formState.errors.password && (
+                          <p className="text-sm text-red-500">{loginForm.formState.errors.password.message}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          id="rememberMe"
+                          {...loginForm.register("rememberMe")}
+                        />
+                        <label
+                          htmlFor="rememberMe"
+                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                        >
+                          Remember me
+                        </label>
+                      </div>
+                      <Button type="submit" className="w-full">
+                        Login
+                      </Button>
+                      <div className="text-center">
+                        <button
+                          type="button"
+                          onClick={() => setIsResettingPassword(true)}
+                          className="text-sm text-blue-600 hover:underline"
+                        >
+                          Forgot password?
+                        </button>
+                      </div>
+                      <div className="relative my-4">
+                        <div className="absolute inset-0 flex items-center">
+                          <div className="w-full border-t border-gray-300"></div>
+                        </div>
+                        <div className="relative flex justify-center text-sm">
+                          <span className="px-2 bg-background text-muted-foreground">
+                            Or continue with
+                          </span>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => window.location.href = "/api/auth/google"}
+                          className="w-full"
+                        >
+                          <SiGoogle className="mr-2" />
+                          Google
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => window.location.href = "/api/auth/facebook"}
+                          className="w-full"
+                        >
+                          <SiFacebook className="mr-2" />
+                          Facebook
+                        </Button>
+                      </div>
+                    </form>
+                  </Form>
+                </>
+              ) : (
+                <div className="space-y-4">
+                  <h3 className="text-lg font-medium">Reset Password</h3>
+                  <form onSubmit={handlePasswordReset} className="space-y-4">
                     <Input
-                      placeholder="Username or Email"
-                      {...loginForm.register("username")}
+                      type="email"
+                      placeholder="Enter your email"
+                      value={resetEmail}
+                      onChange={(e) => setResetEmail(e.target.value)}
+                      required
                     />
-                    {loginForm.formState.errors.username && (
-                      <p className="text-sm text-red-500">{loginForm.formState.errors.username.message}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Input
-                      type="password"
-                      placeholder="Password"
-                      {...loginForm.register("password")}
-                    />
-                    {loginForm.formState.errors.password && (
-                      <p className="text-sm text-red-500">{loginForm.formState.errors.password.message}</p>
-                    )}
-                  </div>
-                  <Button type="submit" className="w-full">
-                    Login
-                  </Button>
-                </form>
-              </Form>
+                    <Button type="submit" className="w-full">
+                      Send Reset Link
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="w-full"
+                      onClick={() => setIsResettingPassword(false)}
+                    >
+                      Back to Login
+                    </Button>
+                  </form>
+                </div>
+              )}
             </TabsContent>
             <TabsContent value="register">
               <Form {...registerForm}>
@@ -168,6 +282,36 @@ export default function AuthPage() {
                   <Button type="submit" className="w-full">
                     Register
                   </Button>
+                  <div className="relative my-4">
+                    <div className="absolute inset-0 flex items-center">
+                      <div className="w-full border-t border-gray-300"></div>
+                    </div>
+                    <div className="relative flex justify-center text-sm">
+                      <span className="px-2 bg-background text-muted-foreground">
+                        Or register with
+                      </span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => window.location.href = "/api/auth/google"}
+                      className="w-full"
+                    >
+                      <SiGoogle className="mr-2" />
+                      Google
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => window.location.href = "/api/auth/facebook"}
+                      className="w-full"
+                    >
+                      <SiFacebook className="mr-2" />
+                      Facebook
+                    </Button>
+                  </div>
                 </form>
               </Form>
             </TabsContent>
