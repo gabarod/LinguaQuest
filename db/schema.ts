@@ -62,6 +62,14 @@ export const userStats = pgTable("user_stats", {
   totalPoints: integer("total_points").default(0),
   streak: integer("streak").default(0),
   lastActivity: timestamp("last_activity").defaultNow(),
+  weeklyXP: integer("weekly_xp").default(0),
+  monthlyXP: integer("monthly_xp").default(0),
+  globalRank: integer("global_rank"),
+  achievements: json("achievements").$type<{
+    id: number;
+    name: string;
+    unlockedAt: string;
+  }[]>().default([]),
 });
 
 export const milestones = pgTable("milestones", {

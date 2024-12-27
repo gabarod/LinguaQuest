@@ -417,6 +417,116 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Get global leaderboard
+  app.get("/api/leaderboard/global", async (req, res) => {
+    try {
+      const leaderboard = await db
+        .select({
+          id: users.id,
+          username: users.username,
+          totalPoints: userStats.totalPoints,
+          weeklyXP: userStats.weeklyXP,
+          monthlyXP: userStats.monthlyXP,
+          streak: userStats.streak,
+          globalRank: userStats.globalRank,
+        })
+        .from(users)
+        .innerJoin(userStats, eq(users.id, userStats.userId))
+        .orderBy(sql`${userStats.totalPoints} DESC`)
+        .limit(100);
+
+      res.json(leaderboard);
+    } catch (error) {
+      console.error("Error fetching global leaderboard:", error);
+      res.status(500).send("Failed to fetch leaderboard");
+    }
+  });
+
+  // Get user rankings by time period
+  app.get("/api/leaderboard/:period", async (req, res) => {
+    const period = req.params.period; // 'weekly' or 'monthly'
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    try {
+      const leaderboard = await db
+        .select({
+          id: users.id,
+          username: users.username,
+          xp: period === 'weekly' ? userStats.weeklyXP : userStats.monthlyXP,
+          rank: sql<number>`rank() over (order by ${
+            period === 'weekly' ? userStats.weeklyXP : userStats.monthlyXP
+          } desc)`,
+        })
+        .from(users)
+        .innerJoin(userStats, eq(users.id, userStats.userId))
+        .orderBy(
+          period === 'weekly' ? userStats.weeklyXP : userStats.monthlyXP,
+          'desc'
+        )
+        .limit(100);
+
+      // Get user's position if not in top 100
+      const userRank = leaderboard.find(entry => entry.id === userId)?.rank;
+
+      if (!userRank) {
+        const [userPosition] = await db
+          .select({
+            rank: sql<number>`rank() over (order by ${
+              period === 'weekly' ? userStats.weeklyXP : userStats.monthlyXP
+            } desc)`,
+          })
+          .from(userStats)
+          .where(eq(userStats.userId, userId));
+
+        if (userPosition) {
+          leaderboard.push({
+            id: userId,
+            username: null, //No username needed, this is just a rank
+            xp: null,
+            rank: userPosition.rank,
+            isCurrentUser: true,
+          });
+        }
+      }
+
+      res.json(leaderboard);
+    } catch (error) {
+      console.error(`Error fetching ${period} leaderboard:`, error);
+      res.status(500).send("Failed to fetch leaderboard");
+    }
+  });
+
+  // Get user's ranking stats
+  app.get("/api/leaderboard/user/stats", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    try {
+      const [userStats] = await db
+        .select({
+          globalRank: sql<number>`rank() over (order by ${userStats.totalPoints} desc)`,
+          weeklyRank: sql<number>`rank() over (order by ${userStats.weeklyXP} desc)`,
+          monthlyRank: sql<number>`rank() over (order by ${userStats.monthlyXP} desc)`,
+          totalPoints: userStats.totalPoints,
+          weeklyXP: userStats.weeklyXP,
+          monthlyXP: userStats.monthlyXP,
+        })
+        .from(userStats)
+        .where(eq(userStats.userId, userId));
+
+      res.json(userStats);
+    } catch (error) {
+      console.error("Error fetching user ranking stats:", error);
+      res.status(500).send("Failed to fetch user stats");
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
