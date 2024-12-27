@@ -24,4 +24,6 @@ export interface Exercise {
   question: string;
   options?: string[];
   correctAnswer: string;
+  difficulty: string;
+  skillType?: string;
 }

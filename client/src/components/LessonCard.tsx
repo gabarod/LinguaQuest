@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { type Lesson } from "@/types";
 import { Book, Headphones, MessageSquare, Pen } from "lucide-react";
 
-const typeIcons = {
+const typeIcons: Record<string, any> = {
   speaking: MessageSquare,
   reading: Book,
   writing: Pen,
@@ -16,7 +16,7 @@ interface LessonCardProps {
 }
 
 export function LessonCard({ lesson, onClick }: LessonCardProps) {
-  const Icon = typeIcons[lesson.type];
+  const Icon = typeIcons[lesson.type] || Book;
 
   return (
     <Card 
