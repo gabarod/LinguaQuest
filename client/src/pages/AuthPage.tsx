@@ -12,38 +12,40 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useLocation } from "wouter";
 import { SiGoogle, SiFacebook } from "react-icons/si";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Loader2 } from "lucide-react";
 
 const loginSchema = z.object({
-  username: z.string().min(1, "Username or email is required"),
-  password: z.string().min(1, "Password is required"),
+  username: z.string().min(1, "El nombre de usuario es requerido"),
+  password: z.string().min(1, "La contraseña es requerida"),
   rememberMe: z.boolean().default(false),
 });
 
 const registerSchema = z.object({
   username: z.string()
-    .min(3, "Username must be at least 3 characters")
-    .max(20, "Username must be less than 20 characters"),
-  email: z.string().email("Invalid email address"),
+    .min(3, "El nombre de usuario debe tener al menos 3 caracteres")
+    .max(20, "El nombre de usuario debe tener menos de 20 caracteres"),
   password: z
     .string()
-    .min(8, "Password must be at least 8 characters")
-    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
-    .regex(/[a-z]/, "Password must contain at least one lowercase letter")
-    .regex(/[0-9]/, "Password must contain at least one number")
-    .regex(/[^A-Za-z0-9]/, "Password must contain at least one special character"),
+    .min(8, "La contraseña debe tener al menos 8 caracteres")
+    .regex(/[A-Z]/, "La contraseña debe contener al menos una letra mayúscula")
+    .regex(/[a-z]/, "La contraseña debe contener al menos una letra minúscula")
+    .regex(/[0-9]/, "La contraseña debe contener al menos un número")
+    .regex(/[^A-Za-z0-9]/, "La contraseña debe contener al menos un carácter especial"),
 });
+
+type LoginFormData = z.infer<typeof loginSchema>;
+type RegisterFormData = z.infer<typeof registerSchema>;
 
 export default function AuthPage() {
   const { login, register } = useUser();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
-  const [isResettingPassword, setIsResettingPassword] = useState(false);
-  const [resetEmail, setResetEmail] = useState("");
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [showRegisterPassword, setShowRegisterPassword] = useState(false);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
 
-  const loginForm = useForm({
+  const loginForm = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
       username: "",
@@ -52,82 +54,69 @@ export default function AuthPage() {
     },
   });
 
-  const registerForm = useForm({
+  const registerForm = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
       username: "",
-      email: "",
       password: "",
     },
   });
 
-  const handleLogin = async (data: z.infer<typeof loginSchema>) => {
+  const handleLogin = async (data: LoginFormData) => {
     try {
+      setIsLoggingIn(true);
       const result = await login(data);
-      if (!result.ok) {
+
+      if (result.success) {
+        toast({
+          title: "¡Bienvenido!",
+          description: "Has iniciado sesión correctamente",
+        });
+        setLocation("/");
+      } else {
         toast({
           variant: "destructive",
           title: "Error",
           description: result.message,
         });
-      } else {
-        setLocation("/"); // Redirect to home after successful login
       }
     } catch (error) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "An unexpected error occurred",
+        description: "Ocurrió un error inesperado",
       });
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
-  const handleRegister = async (data: z.infer<typeof registerSchema>) => {
+  const handleRegister = async (data: RegisterFormData) => {
     try {
+      setIsRegistering(true);
       const result = await register(data);
-      if (!result.ok) {
+
+      if (result.success) {
+        toast({
+          title: "¡Registro exitoso!",
+          description: "Tu cuenta ha sido creada correctamente",
+        });
+        setLocation("/");
+      } else {
         toast({
           variant: "destructive",
           title: "Error",
           description: result.message,
         });
-      } else {
-        setLocation("/onboarding"); // Redirect to onboarding after successful registration
       }
     } catch (error) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "An unexpected error occurred",
+        description: "Ocurrió un error inesperado",
       });
-    }
-  };
-
-  const handlePasswordReset = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const response = await fetch("/api/forgot-password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: resetEmail }),
-      });
-
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-
-      toast({
-        title: "Success",
-        description: "If an account exists with this email, you will receive password reset instructions.",
-      });
-      setIsResettingPassword(false);
-      setResetEmail("");
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to send reset email",
-      });
+    } finally {
+      setIsRegistering(false);
     }
   };
 
@@ -135,157 +124,99 @@ export default function AuthPage() {
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl text-center">Welcome to LinguaQuest</CardTitle>
+          <CardTitle className="text-2xl text-center">Bienvenido a LinguaQuest</CardTitle>
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="login" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="login">Login</TabsTrigger>
-              <TabsTrigger value="register">Register</TabsTrigger>
+              <TabsTrigger value="login">Iniciar Sesión</TabsTrigger>
+              <TabsTrigger value="register">Registrarse</TabsTrigger>
             </TabsList>
             <TabsContent value="login">
-              {!isResettingPassword ? (
-                <>
-                  <Form {...loginForm}>
-                    <form onSubmit={loginForm.handleSubmit(handleLogin)} className="space-y-4">
-                      <div className="space-y-2">
-                        <Input
-                          placeholder="Username or Email"
-                          {...loginForm.register("username")}
-                        />
-                        {loginForm.formState.errors.username && (
-                          <p className="text-sm text-red-500">{loginForm.formState.errors.username.message}</p>
-                        )}
-                      </div>
-                      <div className="space-y-2 relative">
-                        <Input
-                          type={showLoginPassword ? "text" : "password"}
-                          placeholder="Password"
-                          {...loginForm.register("password")}
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="absolute right-2 top-0.5"
-                          onClick={() => setShowLoginPassword(!showLoginPassword)}
-                        >
-                          {showLoginPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </Button>
-                        {loginForm.formState.errors.password && (
-                          <p className="text-sm text-red-500">{loginForm.formState.errors.password.message}</p>
-                        )}
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Checkbox
-                          id="rememberMe"
-                          {...loginForm.register("rememberMe")}
-                        />
-                        <label
-                          htmlFor="rememberMe"
-                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                        >
-                          Remember me
-                        </label>
-                      </div>
-                      <Button type="submit" className="w-full">
-                        Login
-                      </Button>
-                      <div className="text-center">
-                        <button
-                          type="button"
-                          onClick={() => setIsResettingPassword(true)}
-                          className="text-sm text-blue-600 hover:underline"
-                        >
-                          Forgot password?
-                        </button>
-                      </div>
-                      <div className="relative my-4">
-                        <div className="absolute inset-0 flex items-center">
-                          <div className="w-full border-t border-gray-300"></div>
-                        </div>
-                        <div className="relative flex justify-center text-sm">
-                          <span className="px-2 bg-background text-muted-foreground">
-                            Or continue with
-                          </span>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => window.location.href = "/api/auth/google"}
-                          className="w-full"
-                        >
-                          <SiGoogle className="mr-2" />
-                          Google
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => window.location.href = "/api/auth/facebook"}
-                          className="w-full"
-                        >
-                          <SiFacebook className="mr-2" />
-                          Facebook
-                        </Button>
-                      </div>
-                    </form>
-                  </Form>
-                </>
-              ) : (
-                <div className="space-y-4">
-                  <h3 className="text-lg font-medium">Reset Password</h3>
-                  <form onSubmit={handlePasswordReset} className="space-y-4">
+              <Form {...loginForm}>
+                <form onSubmit={loginForm.handleSubmit(handleLogin)} className="space-y-4">
+                  <div className="space-y-2">
                     <Input
-                      type="email"
-                      placeholder="Enter your email"
-                      value={resetEmail}
-                      onChange={(e) => setResetEmail(e.target.value)}
-                      required
+                      placeholder="Nombre de usuario"
+                      {...loginForm.register("username")}
+                      disabled={isLoggingIn}
                     />
-                    <Button type="submit" className="w-full">
-                      Send Reset Link
-                    </Button>
+                    {loginForm.formState.errors.username && (
+                      <p className="text-sm text-red-500">
+                        {loginForm.formState.errors.username.message}
+                      </p>
+                    )}
+                  </div>
+                  <div className="space-y-2 relative">
+                    <Input
+                      type={showLoginPassword ? "text" : "password"}
+                      placeholder="Contraseña"
+                      {...loginForm.register("password")}
+                      disabled={isLoggingIn}
+                    />
                     <Button
                       type="button"
                       variant="ghost"
-                      className="w-full"
-                      onClick={() => setIsResettingPassword(false)}
+                      size="icon"
+                      className="absolute right-2 top-0.5"
+                      onClick={() => setShowLoginPassword(!showLoginPassword)}
+                      disabled={isLoggingIn}
                     >
-                      Back to Login
+                      {showLoginPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </Button>
-                  </form>
-                </div>
-              )}
+                    {loginForm.formState.errors.password && (
+                      <p className="text-sm text-red-500">
+                        {loginForm.formState.errors.password.message}
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="rememberMe"
+                      {...loginForm.register("rememberMe")}
+                      disabled={isLoggingIn}
+                    />
+                    <label
+                      htmlFor="rememberMe"
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    >
+                      Recordarme
+                    </label>
+                  </div>
+                  <Button type="submit" className="w-full" disabled={isLoggingIn}>
+                    {isLoggingIn ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Iniciando sesión...
+                      </>
+                    ) : (
+                      "Iniciar Sesión"
+                    )}
+                  </Button>
+                </form>
+              </Form>
             </TabsContent>
             <TabsContent value="register">
               <Form {...registerForm}>
                 <form onSubmit={registerForm.handleSubmit(handleRegister)} className="space-y-4">
                   <div className="space-y-2">
                     <Input
-                      placeholder="Username"
+                      placeholder="Nombre de usuario"
                       {...registerForm.register("username")}
+                      disabled={isRegistering}
                     />
                     {registerForm.formState.errors.username && (
-                      <p className="text-sm text-red-500">{registerForm.formState.errors.username.message}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Input
-                      type="email"
-                      placeholder="Email"
-                      {...registerForm.register("email")}
-                    />
-                    {registerForm.formState.errors.email && (
-                      <p className="text-sm text-red-500">{registerForm.formState.errors.email.message}</p>
+                      <p className="text-sm text-red-500">
+                        {registerForm.formState.errors.username.message}
+                      </p>
                     )}
                   </div>
                   <div className="space-y-2 relative">
                     <Input
                       type={showRegisterPassword ? "text" : "password"}
-                      placeholder="Password"
+                      placeholder="Contraseña"
                       {...registerForm.register("password")}
+                      disabled={isRegistering}
                     />
                     <Button
                       type="button"
@@ -293,46 +224,26 @@ export default function AuthPage() {
                       size="icon"
                       className="absolute right-2 top-0.5"
                       onClick={() => setShowRegisterPassword(!showRegisterPassword)}
+                      disabled={isRegistering}
                     >
                       {showRegisterPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </Button>
                     {registerForm.formState.errors.password && (
-                      <p className="text-sm text-red-500">{registerForm.formState.errors.password.message}</p>
+                      <p className="text-sm text-red-500">
+                        {registerForm.formState.errors.password.message}
+                      </p>
                     )}
                   </div>
-                  <Button type="submit" className="w-full">
-                    Register
+                  <Button type="submit" className="w-full" disabled={isRegistering}>
+                    {isRegistering ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Registrando...
+                      </>
+                    ) : (
+                      "Registrarse"
+                    )}
                   </Button>
-                  <div className="relative my-4">
-                    <div className="absolute inset-0 flex items-center">
-                      <div className="w-full border-t border-gray-300"></div>
-                    </div>
-                    <div className="relative flex justify-center text-sm">
-                      <span className="px-2 bg-background text-muted-foreground">
-                        Or register with
-                      </span>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => window.location.href = "/api/auth/google"}
-                      className="w-full"
-                    >
-                      <SiGoogle className="mr-2" />
-                      Google
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => window.location.href = "/api/auth/facebook"}
-                      className="w-full"
-                    >
-                      <SiFacebook className="mr-2" />
-                      Facebook
-                    </Button>
-                  </div>
                 </form>
               </Form>
             </TabsContent>
