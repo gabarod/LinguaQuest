@@ -3,13 +3,12 @@ import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { db } from "@db";
 import { sql } from "drizzle-orm";
-import { lessons, exercises, userProgress, userStats, users, dailyChallenges } from "@db/schema";
+import { lessons, exercises, languageProgress, users, dailyChallenges } from "@db/schema";
 import { eq, and, desc, gte } from "drizzle-orm";
 import learningPathRouter from "./routes/learningPath";
 import { logger } from './services/loggingService';
 import { subDays, startOfDay, format } from 'date-fns';
 
-// Define message interface
 interface ChatMessage {
   id: string;
   role: "user" | "assistant";
@@ -17,15 +16,10 @@ interface ChatMessage {
   timestamp: Date;
 }
 
-// Define supported languages (this needs to be defined elsewhere in your project)
-const supportedLanguages = ["english", "spanish", "french"]; // Example
-
 export function registerRoutes(app: Express): Server {
   const httpServer = createServer(app);
 
   setupAuth(app);
-
-  // Use learning path router
   app.use(learningPathRouter);
 
   // Get initial lessons
@@ -44,7 +38,6 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).send("User not found");
       }
 
-      // Filter lessons by user's target language
       const allLessons = await db.query.lessons.findMany({
         where: eq(lessons.language, user.targetLanguage),
         orderBy: [desc(lessons.points)],
@@ -57,7 +50,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-
   // Get daily challenge
   app.get("/api/daily-challenge", async (req, res) => {
     const userId = req.user?.id;
@@ -66,22 +58,31 @@ export function registerRoutes(app: Express): Server {
     }
 
     try {
+      const user = await db.query.users.findFirst({
+        where: eq(users.id, userId),
+      });
+
+      if (!user) {
+        return res.status(404).send("User not found");
+      }
+
       const today = startOfDay(new Date());
       const [dailyChallenge] = await db
         .select()
         .from(dailyChallenges)
         .where(and(
           eq(dailyChallenges.userId, userId),
+          eq(dailyChallenges.language, user.targetLanguage),
           gte(dailyChallenges.createdAt, today)
         ))
         .limit(1);
 
       if (!dailyChallenge) {
-        // Create a new daily challenge if none exists
         const [newChallenge] = await db
           .insert(dailyChallenges)
           .values({
             userId,
+            language: user.targetLanguage,
             type: 'practice',
             description: 'Complete 3 lessons today',
             points: 100,
@@ -114,7 +115,6 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).send("User not found");
       }
 
-      // Return initial greeting message in the target language
       const messages: ChatMessage[] = [
         {
           id: "1",
@@ -142,7 +142,6 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).send("Message content is required");
       }
 
-      // Get user's target language
       const user = await db.query.users.findFirst({
         where: eq(users.id, userId),
       });
@@ -151,7 +150,6 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).send("User not found");
       }
 
-      // Call Perplexity API with enhanced language learning prompt
       const response = await fetch("https://api.perplexity.ai/chat/completions", {
         method: "POST",
         headers: {
@@ -229,7 +227,6 @@ export function registerRoutes(app: Express): Server {
 
       const buddies = await buddiesQuery;
 
-      // Add mock data for demonstration
       const enrichedBuddies = buddies.map(buddy => ({
         ...buddy,
         lastActive: new Date(),
@@ -243,6 +240,54 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Get progress for current language
+  app.get("/api/progress", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    try {
+      const user = await db.query.users.findFirst({
+        where: eq(users.id, userId),
+      });
+
+      if (!user) {
+        return res.status(404).send("User not found");
+      }
+
+      const progress = await db.query.languageProgress.findFirst({
+        where: and(
+          eq(languageProgress.userId, userId),
+          eq(languageProgress.language, user.targetLanguage)
+        ),
+      });
+
+      if (!progress) {
+        // Create initial progress for new user and language
+        const [newProgress] = await db
+          .insert(languageProgress)
+          .values({
+            userId,
+            language: user.targetLanguage,
+            lessonsCompleted: 0,
+            totalPoints: 0,
+            streak: 0,
+            lastActivity: new Date(),
+          })
+          .returning();
+
+        return res.json(newProgress);
+      }
+
+      res.json(progress);
+    } catch (error) {
+      logger.error("Error fetching progress:", error);
+      res.status(500).send("Failed to fetch progress");
+    }
+  });
+
+
   // Leaderboard routes
   app.get("/api/leaderboard/:period", async (req, res) => {
     const userId = req.user?.id;
@@ -252,24 +297,32 @@ export function registerRoutes(app: Express): Server {
 
     try {
       const period = req.params.period as "global" | "weekly" | "monthly";
+      const user = await db.query.users.findFirst({
+        where: eq(users.id, userId),
+      });
+
+      if (!user) {
+        return res.status(404).send("User not found");
+      }
 
       const leaderboardQuery = db
         .select({
           id: users.id,
           username: users.username,
-          totalPoints: userStats.totalPoints,
-          weeklyXP: userStats.weeklyXP,
-          monthlyXP: userStats.monthlyXP,
-          streak: userStats.streak,
+          totalPoints: languageProgress.totalPoints,
+          weeklyXP: languageProgress.weeklyXP,
+          monthlyXP: languageProgress.monthlyXP,
+          streak: languageProgress.streak,
         })
         .from(users)
-        .innerJoin(userStats, eq(users.id, userStats.userId))
+        .innerJoin(languageProgress, eq(users.id, languageProgress.userId))
+        .where(eq(languageProgress.language, user.targetLanguage))
         .orderBy(
           period === "weekly"
-            ? desc(userStats.weeklyXP)
+            ? desc(languageProgress.weeklyXP)
             : period === "monthly"
-            ? desc(userStats.monthlyXP)
-            : desc(userStats.totalPoints)
+            ? desc(languageProgress.monthlyXP)
+            : desc(languageProgress.totalPoints)
         )
         .limit(50);
 
@@ -288,8 +341,8 @@ export function registerRoutes(app: Express): Server {
     }
 
     try {
-      const stats = await db.query.userStats.findFirst({
-        where: eq(userStats.userId, userId),
+      const stats = await db.query.languageProgress.findFirst({
+        where: eq(languageProgress.userId, userId),
       });
 
       res.json({
@@ -306,52 +359,6 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Get progress
-  app.get("/api/progress", async (req, res) => {
-    const userId = req.user?.id;
-    if (!userId) {
-      return res.status(401).send("Not authenticated");
-    }
-
-    try {
-      const user = await db.query.users.findFirst({
-        where: eq(users.id, userId),
-      });
-
-      if (!user) {
-        return res.status(404).send("User not found");
-      }
-
-      const stats = await db.query.userStats.findFirst({
-        where: and(
-          eq(userStats.userId, userId),
-          eq(userStats.language, user.targetLanguage)
-        ),
-      });
-
-      if (!stats) {
-        // Create initial stats for new user and language
-        const [newStats] = await db
-          .insert(userStats)
-          .values({
-            userId,
-            language: user.targetLanguage,
-            lessonsCompleted: 0,
-            totalPoints: 0,
-            streak: 0,
-            lastActivity: new Date(),
-          })
-          .returning();
-
-        return res.json(newStats);
-      }
-
-      res.json(stats);
-    } catch (error) {
-      logger.error("Error fetching progress:", error);
-      res.status(500).send("Failed to fetch progress");
-    }
-  });
 
   // Get detailed progress for dashboard
   app.get("/api/progress/detailed", async (req, res) => {
@@ -367,18 +374,18 @@ export function registerRoutes(app: Express): Server {
 
       const weeklyProgress = await db
         .select({
-          day: sql<string>`date_trunc('day', ${userProgress.completedAt})::text`,
+          day: sql<string>`date_trunc('day', ${languageProgress.completedAt})::text`,
           points: sql<number>`sum(${lessons.points})`,
           exercises: sql<number>`count(*)`,
         })
-        .from(userProgress)
-        .innerJoin(lessons, eq(lessons.id, userProgress.lessonId))
+        .from(languageProgress)
+        .innerJoin(lessons, eq(lessons.id, languageProgress.lessonId))
         .where(and(
-          eq(userProgress.userId, userId),
-          gte(userProgress.completedAt, weekAgo)
+          eq(languageProgress.userId, userId),
+          gte(languageProgress.completedAt, weekAgo)
         ))
-        .groupBy(sql`date_trunc('day', ${userProgress.completedAt})`)
-        .orderBy(sql`date_trunc('day', ${userProgress.completedAt})`);
+        .groupBy(sql`date_trunc('day', ${languageProgress.completedAt})`)
+        .orderBy(sql`date_trunc('day', ${languageProgress.completedAt})`);
 
       // Get skill distribution
       const skillDistribution = await db
@@ -386,20 +393,20 @@ export function registerRoutes(app: Express): Server {
           skill: lessons.type,
           value: sql<number>`count(*)`,
         })
-        .from(userProgress)
-        .innerJoin(lessons, eq(lessons.id, userProgress.lessonId))
-        .where(eq(userProgress.userId, userId))
+        .from(languageProgress)
+        .innerJoin(lessons, eq(lessons.id, languageProgress.lessonId))
+        .where(eq(languageProgress.userId, userId))
         .groupBy(lessons.type);
 
       // Get user stats
-      const stats = await db.query.userStats.findFirst({
-        where: eq(userStats.userId, userId),
+      const stats = await db.query.languageProgress.findFirst({
+        where: eq(languageProgress.userId, userId),
       });
 
       if (!stats) {
         // Create initial stats for new user
         const [newStats] = await db
-          .insert(userStats)
+          .insert(languageProgress)
           .values({
             userId,
             lessonsCompleted: 0,
@@ -433,7 +440,7 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Add this route after the existing /api/user endpoint
+  // Update user's target language
   app.post("/api/user/language", async (req, res) => {
     const userId = req.user?.id;
     if (!userId) {
@@ -453,16 +460,16 @@ export function registerRoutes(app: Express): Server {
         .where(eq(users.id, userId))
         .returning();
 
-      // Ensure user stats exist for this language
-      const existingStats = await db.query.userStats.findFirst({
+      // Ensure language progress exists for this language
+      const existingProgress = await db.query.languageProgress.findFirst({
         where: and(
-          eq(userStats.userId, userId),
-          eq(userStats.language, language)
+          eq(languageProgress.userId, userId),
+          eq(languageProgress.language, language)
         ),
       });
 
-      if (!existingStats) {
-        await db.insert(userStats).values({
+      if (!existingProgress) {
+        await db.insert(languageProgress).values({
           userId,
           language,
           lessonsCompleted: 0,

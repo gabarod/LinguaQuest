@@ -60,41 +60,30 @@ export const exercises = pgTable("exercises", {
   points: integer("points").notNull(),
 });
 
-// Progress tracking tables
-export const userProgress = pgTable("user_progress", {
+// Language progress tracking
+export const languageProgress = pgTable("language_progress", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id).notNull(),
-  lessonId: integer("lesson_id").references(() => lessons.id).notNull(),
-  completed: boolean("completed").default(false),
-  completedAt: timestamp("completed_at"),
-  score: integer("score").default(0),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-export const userStats = pgTable("user_stats", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id").references(() => users.id).notNull(),
-  language: text("language").notNull().default('english'),
+  language: text("language").notNull(),
+  lessonId: integer("lesson_id").references(() => lessons.id),
   lessonsCompleted: integer("lessons_completed").default(0),
   totalPoints: integer("total_points").default(0),
   weeklyXP: integer("weekly_xp").default(0),
   monthlyXP: integer("monthly_xp").default(0),
   streak: integer("streak").default(0),
-  globalRank: integer("global_rank"),
   lastActivity: timestamp("last_activity").defaultNow(),
+  completedAt: timestamp("completed_at"),
   proficiencyLevel: text("proficiency_level").default('beginner'),
-});
-
-export const userStatsLanguageIdx = pgTable("user_stats_language_idx", {
-  userId: integer("user_id").references(() => users.id),
-  language: text("language"),
+  globalRank: integer("global_rank").default(999),
 }, (table) => ({
-  pk: primaryKey({ columns: [table.userId, table.language] }),
+  unq: primaryKey({ columns: [table.userId, table.language] }),
 }));
 
+// Daily challenges
 export const dailyChallenges = pgTable("daily_challenges", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id).notNull(),
+  language: text("language").notNull(),
   type: text("type").notNull(),
   description: text("description").notNull(),
   points: integer("points").notNull(),
@@ -106,24 +95,23 @@ export const dailyChallenges = pgTable("daily_challenges", {
 // Relations
 export const lessonsRelations = relations(lessons, ({ many }) => ({
   exercises: many(exercises),
-  progress: many(userProgress),
-}));
-
-export const userProgressRelations = relations(userProgress, ({ one }) => ({
-  user: one(users, {
-    fields: [userProgress.userId],
-    references: [users.id],
-  }),
-  lesson: one(lessons, {
-    fields: [userProgress.lessonId],
-    references: [lessons.id],
-  }),
+  languageProgress: many(languageProgress),
 }));
 
 export const usersRelations = relations(users, ({ many }) => ({
-  progress: many(userProgress),
-  stats: many(userStats),
+  languageProgress: many(languageProgress),
   dailyChallenges: many(dailyChallenges),
+}));
+
+export const languageProgressRelations = relations(languageProgress, ({ one }) => ({
+  user: one(users, {
+    fields: [languageProgress.userId],
+    references: [users.id],
+  }),
+  lesson: one(lessons, {
+    fields: [languageProgress.lessonId],
+    references: [lessons.id],
+  }),
 }));
 
 // Schemas for validation
@@ -146,6 +134,5 @@ export type InsertUser = typeof users.$inferInsert;
 // Additional types for frontend
 export type Lesson = typeof lessons.$inferSelect;
 export type Exercise = typeof exercises.$inferSelect;
-export type UserProgress = typeof userProgress.$inferSelect;
-export type UserStats = typeof userStats.$inferSelect;
+export type LanguageProgress = typeof languageProgress.$inferSelect;
 export type DailyChallenge = typeof dailyChallenges.$inferSelect;

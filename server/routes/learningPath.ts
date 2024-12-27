@@ -1,7 +1,8 @@
 import { Router } from "express";
 import { db } from "@db";
-import { lessons, exercises, userProgress, userStats } from "@db/schema";
+import { lessons, exercises, languageProgress } from "@db/schema";
 import { eq, and } from "drizzle-orm";
+import { logger } from '../services/loggingService';
 
 const router = Router();
 
@@ -12,55 +13,49 @@ router.get("/api/learning-path", async (req, res) => {
   }
 
   try {
-    // Get user's completed lessons
-    const progress = await db
-      .select()
-      .from(userProgress)
-      .where(eq(userProgress.userId, req.user.id));
+    // Get user's progress for current language
+    const progress = await db.query.languageProgress.findFirst({
+      where: and(
+        eq(languageProgress.userId, req.user.id),
+        eq(languageProgress.language, req.user.targetLanguage)
+      ),
+    });
 
-    // Get all lessons
+    // Get all lessons for the user's target language
     const allLessons = await db
       .select()
-      .from(lessons);
+      .from(lessons)
+      .where(eq(lessons.language, req.user.targetLanguage));
 
     // Calculate overall progress
-    const completedLessons = progress.filter((p) => p.completed).length;
-    const progressPercentage = (completedLessons / allLessons.length) * 100;
+    const completedLessons = progress?.lessonsCompleted || 0;
+    const progressPercentage = allLessons.length > 0 
+      ? (completedLessons / allLessons.length) * 100 
+      : 0;
 
     // Transform lessons into learning path nodes
     const nodes = allLessons.map((lesson) => {
-      const lessonProgress = progress.find((p) => p.lessonId === lesson.id);
-
       return {
         id: lesson.id,
         title: lesson.title,
         type: lesson.type,
-        status: lessonProgress?.completed
-          ? "completed"
-          : lesson.id <= completedLessons + 1
-          ? "available"
-          : "locked",
+        status: lesson.id <= completedLessons + 1 ? "available" : "locked",
         difficulty: lesson.difficulty,
         estimatedTime: lesson.duration,
       };
-    });
-
-    // Get user stats
-    const userStat = await db.query.userStats.findFirst({
-      where: eq(userStats.userId, req.user.id),
     });
 
     res.json({
       nodes,
       progress: progressPercentage,
       stats: {
-        totalPoints: userStat?.totalPoints || 0,
-        lessonsCompleted: userStat?.lessonsCompleted || 0,
-        streak: userStat?.streak || 0,
+        totalPoints: progress?.totalPoints || 0,
+        lessonsCompleted: progress?.lessonsCompleted || 0,
+        streak: progress?.streak || 0,
       }
     });
   } catch (error) {
-    console.error("Error fetching learning path:", error);
+    logger.error("Error fetching learning path:", error);
     res.status(500).send("Internal server error");
   }
 });
