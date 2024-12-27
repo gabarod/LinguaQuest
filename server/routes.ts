@@ -7,6 +7,7 @@ import { lessons, exercises, userProgress, userStats, milestones, userMilestones
 import { eq, and, gte, lte } from "drizzle-orm";
 import { format, subDays } from "date-fns";
 import { ChatService } from "./services/chatService";
+import { BuddyService } from "./services/buddyService";
 
 export function registerRoutes(app: Express): Server {
   setupAuth(app);
@@ -557,6 +558,151 @@ export function registerRoutes(app: Express): Server {
     } catch (error) {
       console.error("Chat error:", error);
       res.status(500).send("Failed to generate chat response");
+    }
+  });
+
+  // Buddy System Routes
+  app.get("/api/buddies/potential", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    const { language } = req.query;
+    if (!language || typeof language !== "string") {
+      return res.status(400).send("Language parameter is required");
+    }
+
+    try {
+      const potentialBuddies = await BuddyService.findPotentialBuddies(userId, language);
+      res.json(potentialBuddies);
+    } catch (error) {
+      console.error("Error finding potential buddies:", error);
+      res.status(500).send("Failed to find potential buddies");
+    }
+  });
+
+  app.post("/api/buddies/request", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    const { buddyId, language } = req.body;
+    if (!buddyId || !language) {
+      return res.status(400).send("Buddy ID and language are required");
+    }
+
+    try {
+      const request = await BuddyService.sendBuddyRequest(userId, buddyId, language);
+      res.json(request);
+    } catch (error) {
+      console.error("Error sending buddy request:", error);
+      res.status(500).send("Failed to send buddy request");
+    }
+  });
+
+  app.post("/api/buddies/respond/:buddyId", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    const buddyId = parseInt(req.params.buddyId);
+    const { accept } = req.body;
+
+    try {
+      const response = await BuddyService.respondToBuddyRequest(userId, buddyId, accept);
+      res.json(response);
+    } catch (error) {
+      console.error("Error responding to buddy request:", error);
+      res.status(500).send("Failed to respond to buddy request");
+    }
+  });
+
+  app.post("/api/practice-sessions", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    const { participantId, language, scheduledFor, duration, topic } = req.body;
+    if (!participantId || !language || !scheduledFor || !duration) {
+      return res.status(400).send("Missing required session details");
+    }
+
+    try {
+      const session = await BuddyService.schedulePracticeSession(
+        userId,
+        participantId,
+        {
+          language,
+          scheduledFor: new Date(scheduledFor),
+          duration,
+          topic,
+        }
+      );
+      res.json(session);
+    } catch (error) {
+      console.error("Error scheduling practice session:", error);
+      res.status(500).send("Failed to schedule practice session");
+    }
+  });
+
+  app.get("/api/practice-sessions/upcoming", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    try {
+      const sessions = await BuddyService.getUpcomingSessions(userId);
+      res.json(sessions);
+    } catch (error) {
+      console.error("Error fetching upcoming sessions:", error);
+      res.status(500).send("Failed to fetch upcoming sessions");
+    }
+  });
+
+  app.post("/api/practice-sessions/:sessionId/feedback", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    const sessionId = parseInt(req.params.sessionId);
+    const { receiverId, rating, feedback, helpfulness } = req.body;
+
+    if (!receiverId || !rating || !helpfulness) {
+      return res.status(400).send("Missing required feedback details");
+    }
+
+    try {
+      const result = await BuddyService.submitSessionFeedback(
+        sessionId,
+        userId,
+        receiverId,
+        { rating, feedback, helpfulness }
+      );
+      res.json(result);
+    } catch (error) {
+      console.error("Error submitting session feedback:", error);
+      res.status(500).send("Failed to submit session feedback");
+    }
+  });
+
+    app.get("/api/buddies/stats", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    try {
+      const stats = await BuddyService.getBuddyStats(userId);
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching buddy stats:", error);
+      res.status(500).send("Failed to fetch buddy stats");
     }
   });
 

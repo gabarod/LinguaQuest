@@ -166,6 +166,56 @@ export const difficultyPreferences = pgTable("difficulty_preferences", {
   }>().notNull(),
 });
 
+export const buddyConnections = pgTable("buddy_connections", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  buddyId: integer("buddy_id")
+    .notNull()
+    .references(() => users.id),
+  status: text("status").notNull(), // pending, accepted, rejected
+  languageInterest: text("language_interest").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => ({
+  uniquePair: primaryKey({ columns: [table.userId, table.buddyId] }),
+}));
+
+export const practiceSessions = pgTable("practice_sessions", {
+  id: serial("id").primaryKey(),
+  initiatorId: integer("initiator_id")
+    .notNull()
+    .references(() => users.id),
+  participantId: integer("participant_id")
+    .notNull()
+    .references(() => users.id),
+  language: text("language").notNull(),
+  status: text("status").notNull(), // scheduled, ongoing, completed, cancelled
+  scheduledFor: timestamp("scheduled_for"),
+  duration: integer("duration"), // in minutes
+  topic: text("topic"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const sessionFeedback = pgTable("session_feedback", {
+  id: serial("id").primaryKey(),
+  sessionId: integer("session_id")
+    .notNull()
+    .references(() => practiceSessions.id),
+  giverId: integer("giver_id")
+    .notNull()
+    .references(() => users.id),
+  receiverId: integer("receiver_id")
+    .notNull()
+    .references(() => users.id),
+  rating: integer("rating").notNull(), // 1-5 stars
+  feedback: text("feedback"),
+  helpfulness: integer("helpfulness").notNull(), // 1-5 scale
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const userRelations = relations(users, ({ many }) => ({
   progress: many(userProgress),
   stats: many(userStats),
@@ -247,6 +297,44 @@ export const performanceMetricsRelations = relations(performanceMetrics, ({ one 
 export const difficultyPreferencesRelations = relations(difficultyPreferences, ({ one }) => ({
   user: one(users, {
     fields: [difficultyPreferences.userId],
+    references: [users.id],
+  }),
+}));
+
+export const buddyConnectionsRelations = relations(buddyConnections, ({ one }) => ({
+  user: one(users, {
+    fields: [buddyConnections.userId],
+    references: [users.id],
+  }),
+  buddy: one(users, {
+    fields: [buddyConnections.buddyId],
+    references: [users.id],
+  }),
+}));
+
+export const practiceSessionsRelations = relations(practiceSessions, ({ one, many }) => ({
+  initiator: one(users, {
+    fields: [practiceSessions.initiatorId],
+    references: [users.id],
+  }),
+  participant: one(users, {
+    fields: [practiceSessions.participantId],
+    references: [users.id],
+  }),
+  feedback: many(sessionFeedback),
+}));
+
+export const sessionFeedbackRelations = relations(sessionFeedback, ({ one }) => ({
+  session: one(practiceSessions, {
+    fields: [sessionFeedback.sessionId],
+    references: [practiceSessions.id],
+  }),
+  giver: one(users, {
+    fields: [sessionFeedback.giverId],
+    references: [users.id],
+  }),
+  receiver: one(users, {
+    fields: [sessionFeedback.receiverId],
     references: [users.id],
   }),
 }));
