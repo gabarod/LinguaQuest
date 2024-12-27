@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { db } from "@db";
 import { sql } from "drizzle-orm";
-import { lessons, exercises, userProgress, userStats, milestones, userMilestones, dailyChallenges, userChallengeAttempts, users, flashcards, flashcardProgress, difficultyPreferences } from "@db/schema";
+import { lessons, exercises, userProgress, userStats, milestones, userMilestones, dailyChallenges, userChallengeAttempts, users, flashcards, flashcardProgress, difficultyPreferences, languages, userLanguages } from "@db/schema";
 import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { format, subDays } from "date-fns";
 import { ChatService } from "./services/chatService";
@@ -338,6 +338,114 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+
+  // Endpoints para idiomas
+  app.get("/api/languages", async (req, res) => {
+    try {
+      const allLanguages = await db
+        .select()
+        .from(languages);
+
+      res.json(allLanguages);
+    } catch (error) {
+      console.error("Error fetching languages:", error);
+      res.status(500).send("Failed to fetch languages");
+    }
+  });
+
+  app.get("/api/languages/:code", async (req, res) => {
+    try {
+      const [language] = await db
+        .select()
+        .from(languages)
+        .where(eq(languages.code, req.params.code));
+
+      if (!language) {
+        return res.status(404).send("Language not found");
+      }
+
+      res.json(language);
+    } catch (error) {
+      console.error("Error fetching language:", error);
+      res.status(500).send("Failed to fetch language");
+    }
+  });
+
+  app.get("/api/user/languages", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    try {
+      const userLangs = await db
+        .select({
+          code: languages.code,
+          name: languages.name,
+          nativeName: languages.nativeName,
+          flag: languages.flag,
+          isRightToLeft: languages.isRightToLeft,
+          proficiencyLevel: userLanguages.proficiencyLevel,
+          isNative: userLanguages.isNative,
+          isLearning: userLanguages.isLearning,
+          startedLearningAt: userLanguages.startedLearningAt,
+          lastPracticed: userLanguages.lastPracticed,
+        })
+        .from(userLanguages)
+        .innerJoin(languages, eq(languages.code, userLanguages.languageCode))
+        .where(eq(userLanguages.userId, userId));
+
+      res.json(userLangs);
+    } catch (error) {
+      console.error("Error fetching user languages:", error);
+      res.status(500).send("Failed to fetch user languages");
+    }
+  });
+
+  // Actualizar idiomas del usuario
+  app.post("/api/user/languages", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    const { languageCode, isNative, isLearning, proficiencyLevel } = req.body;
+
+    try {
+      const [language] = await db
+        .select()
+        .from(languages)
+        .where(eq(languages.code, languageCode));
+
+      if (!language) {
+        return res.status(404).send("Language not found");
+      }
+
+      await db
+        .insert(userLanguages)
+        .values({
+          userId,
+          languageCode,
+          isNative,
+          isLearning,
+          proficiencyLevel,
+        })
+        .onConflictDoUpdate({
+          target: [userLanguages.userId, userLanguages.languageCode],
+          set: {
+            isNative,
+            isLearning,
+            proficiencyLevel,
+            lastPracticed: new Date(),
+          },
+        });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error updating user languages:", error);
+      res.status(500).send("Failed to update user languages");
+    }
+  });
 
   // Get today's challenge
   app.get("/api/challenges/daily", async (req, res) => {
@@ -1017,7 +1125,7 @@ export function registerRoutes(app: Express): Server {
             {
               role: "user",
               content: text
-                        }
+            }
           ],
           temperature: 0.2
         })

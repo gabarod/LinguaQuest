@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   pgTable,
   text,
@@ -11,7 +12,26 @@ import {
 } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { relations } from "drizzle-orm";
-import { z } from "zod";
+
+export const supportedLanguages = [
+  "en",    // English
+  "zh",    // Chinese (Mandarin)
+  "es",    // Spanish
+  "de",    // German
+  "fr",    // French
+  "it",    // Italian
+  "pt",    // Portuguese
+] as const;
+
+export type SupportedLanguage = typeof supportedLanguages[number];
+
+export const languages = pgTable("languages", {
+  code: text("code").primaryKey(),
+  name: text("name").notNull(),
+  nativeName: text("native_name").notNull(),
+  flag: text("flag").notNull(),
+  isRightToLeft: boolean("is_right_to_left").default(false),
+});
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -69,6 +89,22 @@ export const userProgress = pgTable("user_progress", {
   completedAt: timestamp("completed_at"),
 }, (table) => ({
   pk: primaryKey({ columns: [table.userId, table.lessonId] }),
+}));
+
+export const userLanguages = pgTable("user_languages", {
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  languageCode: text("language_code")
+    .notNull()
+    .references(() => languages.code),
+  proficiencyLevel: text("proficiency_level").notNull(),
+  isNative: boolean("is_native").default(false),
+  isLearning: boolean("is_learning").default(true),
+  startedLearningAt: timestamp("started_learning_at").defaultNow(),
+  lastPracticed: timestamp("last_practiced"),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.userId, table.languageCode] }),
 }));
 
 export const userStats = pgTable("user_stats", {
@@ -264,6 +300,7 @@ export const userRelations = relations(users, ({ many }) => ({
   challengeAttempts: many(userChallengeAttempts),
   flashcards: many(flashcards),
   flashcardProgress: many(flashcardProgress),
+  languages: many(userLanguages),
 }));
 
 export const lessonRelations = relations(lessons, ({ many }) => ({
@@ -435,3 +472,5 @@ export const insertDifficultyPreferencesSchema = createInsertSchema(difficultyPr
 
 export type InsertDifficultyPreferences = z.infer<typeof insertDifficultyPreferencesSchema>;
 export type SelectDifficultyPreferences = typeof difficultyPreferences.$inferSelect;
+
+export const languageSchema = z.enum(supportedLanguages);

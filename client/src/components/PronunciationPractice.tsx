@@ -3,9 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Mic, MicOff, PlayCircle, StopCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import type { SupportedLanguage } from "@db/schema";
 
 interface PronunciationFeedback {
   score: number;
@@ -14,12 +15,22 @@ interface PronunciationFeedback {
   incorrectPhonemes: string[];
 }
 
-export function PronunciationPractice({ text, targetLanguage }: { text: string; targetLanguage: string }) {
+interface Props {
+  text: string;
+  targetLanguage: SupportedLanguage;
+}
+
+export function PronunciationPractice({ text, targetLanguage }: Props) {
   const [isRecording, setIsRecording] = useState(false);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
   const audioChunks = useRef<Blob[]>([]);
   const { toast } = useToast();
+
+  // Obtener información del idioma
+  const { data: language } = useQuery({
+    queryKey: ["/api/languages", targetLanguage],
+  });
 
   const analyzePronunciationMutation = useMutation({
     mutationFn: async (audioBlob: Blob) => {
@@ -97,6 +108,11 @@ export function PronunciationPractice({ text, targetLanguage }: { text: string; 
         <CardTitle className="flex items-center gap-2">
           <Mic className="h-5 w-5" />
           Práctica de Pronunciación
+          {language && (
+            <Badge variant="outline" className="ml-2">
+              {language.flag} {language.name}
+            </Badge>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent>
