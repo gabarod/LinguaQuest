@@ -1,5 +1,7 @@
 import passport from "passport";
 import { IVerifyOptions, Strategy as LocalStrategy } from "passport-local";
+import { Strategy as GoogleStrategy } from "passport-google-oauth20";
+import { Strategy as FacebookStrategy } from "passport-facebook";
 import { type Express } from "express";
 import session from "express-session";
 import createMemoryStore from "memorystore";
@@ -7,7 +9,7 @@ import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { users, insertUserSchema, type SelectUser } from "@db/schema";
 import { db } from "@db";
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 
 const scryptAsync = promisify(scrypt);
 
@@ -63,7 +65,7 @@ export function setupAuth(app: Express) {
           .where(eq(users.username, username))
           .limit(1);
 
-        if (!user) {
+        if (!user || !user.password) {
           return done(null, false, { message: "Invalid username or password" });
         }
 
@@ -78,6 +80,94 @@ export function setupAuth(app: Express) {
       }
     })
   );
+
+  // Configure Google Strategy
+  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+    passport.use(new GoogleStrategy({
+      clientID: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      callbackURL: "/api/auth/google/callback",
+      scope: ["profile", "email"]
+    }, async (accessToken, refreshToken, profile, done) => {
+      try {
+        let [user] = await db
+          .select()
+          .from(users)
+          .where(or(
+            eq(users.googleId, profile.id),
+            profile.emails?.[0]?.value ? eq(users.email, profile.emails[0].value) : undefined
+          ))
+          .limit(1);
+
+        if (!user) {
+          const [newUser] = await db
+            .insert(users)
+            .values({
+              username: profile.displayName,
+              email: profile.emails?.[0]?.value,
+              googleId: profile.id,
+              avatar: profile.photos?.[0]?.value,
+            })
+            .returning();
+          user = newUser;
+        } else if (!user.googleId) {
+          // Link accounts
+          await db
+            .update(users)
+            .set({ googleId: profile.id })
+            .where(eq(users.id, user.id));
+        }
+
+        return done(null, user);
+      } catch (err) {
+        return done(err);
+      }
+    }));
+  }
+
+  // Configure Facebook Strategy
+  if (process.env.FACEBOOK_CLIENT_ID && process.env.FACEBOOK_CLIENT_SECRET) {
+    passport.use(new FacebookStrategy({
+      clientID: process.env.FACEBOOK_CLIENT_ID,
+      clientSecret: process.env.FACEBOOK_CLIENT_SECRET,
+      callbackURL: "/api/auth/facebook/callback",
+      profileFields: ["id", "displayName", "photos", "email"]
+    }, async (accessToken, refreshToken, profile, done) => {
+      try {
+        let [user] = await db
+          .select()
+          .from(users)
+          .where(or(
+            eq(users.facebookId, profile.id),
+            profile.emails?.[0]?.value ? eq(users.email, profile.emails[0].value) : undefined
+          ))
+          .limit(1);
+
+        if (!user) {
+          const [newUser] = await db
+            .insert(users)
+            .values({
+              username: profile.displayName,
+              email: profile.emails?.[0]?.value,
+              facebookId: profile.id,
+              avatar: profile.photos?.[0]?.value,
+            })
+            .returning();
+          user = newUser;
+        } else if (!user.facebookId) {
+          // Link accounts
+          await db
+            .update(users)
+            .set({ facebookId: profile.id })
+            .where(eq(users.id, user.id));
+        }
+
+        return done(null, user);
+      } catch (err) {
+        return done(err);
+      }
+    }));
+  }
 
   passport.serializeUser((user, done) => {
     done(null, user.id);
@@ -213,4 +303,20 @@ export function setupAuth(app: Express) {
       message: "Not authenticated",
     });
   });
+
+  app.get("/api/auth/google", passport.authenticate("google"));
+  app.get("/api/auth/google/callback",
+    passport.authenticate("google", {
+      successRedirect: "/",
+      failureRedirect: "/login"
+    })
+  );
+
+  app.get("/api/auth/facebook", passport.authenticate("facebook"));
+  app.get("/api/auth/facebook/callback",
+    passport.authenticate("facebook", {
+      successRedirect: "/",
+      failureRedirect: "/login"
+    })
+  );
 }

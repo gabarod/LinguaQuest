@@ -17,7 +17,10 @@ export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").unique().notNull(),
   email: text("email").unique(),
-  password: text("password").notNull(),
+  password: text("password"),
+  googleId: text("google_id").unique(),
+  facebookId: text("facebook_id").unique(),
+  avatar: text("avatar"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -29,8 +32,12 @@ export const insertUserSchema = createInsertSchema(users, {
     .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
     .regex(/[a-z]/, "Password must contain at least one lowercase letter")
     .regex(/[0-9]/, "Password must contain at least one number")
-    .regex(/[^A-Za-z0-9]/, "Password must contain at least one special character"),
+    .regex(/[^A-Za-z0-9]/, "Password must contain at least one special character")
+    .optional(),
   email: z.string().email("Invalid email address").optional(),
+  googleId: z.string().optional(),
+  facebookId: z.string().optional(),
+  avatar: z.string().optional(),
 });
 
 export const selectUserSchema = createSelectSchema(users);
