@@ -7,11 +7,66 @@ import {
   boolean,
   timestamp,
   primaryKey,
-  json,
   decimal,
+  json,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { relations } from "drizzle-orm";
+
+// Users schema and validation
+export const users = pgTable("users", {
+  id: serial("id").primaryKey(),
+  username: text("username").unique().notNull(),
+  email: text("email").unique().notNull(),
+  password: text("password"),
+  avatar: text("avatar"),
+  isEmailVerified: boolean("is_email_verified").default(false),
+  lastLoginAt: timestamp("last_login_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertUserSchema = createInsertSchema(users, {
+  email: z.string().email("Invalid email address"),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+    .regex(/[a-z]/, "Password must contain at least one lowercase letter")
+    .regex(/[0-9]/, "Password must contain at least one number")
+    .regex(/[^A-Za-z0-9]/, "Password must contain at least one special character"),
+});
+
+export const selectUserSchema = createSelectSchema(users);
+
+export type SelectUser = typeof users.$inferSelect;
+export type InsertUser = typeof users.$inferInsert;
+export type User = Omit<SelectUser, "password">;
+
+// Re-export existing types and schemas that were previously defined
+export type {
+  SelectFlashcard,
+  InsertFlashcard,
+  SelectFlashcardProgress,
+  InsertFlashcardProgress,
+  SpacedRepetitionData,
+} from './types';
+
+// Relations
+export const userRelations = relations(users, ({ many }) => ({
+  progress: many(userProgress),
+  stats: many(userStats),
+  milestones: many(userMilestones),
+  challengeAttempts: many(userChallengeAttempts),
+  flashcards: many(flashcards),
+  flashcardProgress: many(flashcardProgress),
+  languages: many(userLanguages),
+  learningPaths: many(learningPaths),
+  recommendations: many(aiRecommendations),
+  skillProgression: many(skillProgression),
+  pronunciationAttempts: many(pronunciationAttempts),
+  pronunciationMetrics: many(pronunciationMetrics),
+}));
 
 export const supportedLanguages = [
   "en",    // English
@@ -31,23 +86,6 @@ export const languages = pgTable("languages", {
   nativeName: text("native_name").notNull(),
   flag: text("flag").notNull(),
   isRightToLeft: boolean("is_right_to_left").default(false),
-});
-
-export const users = pgTable("users", {
-  id: serial("id").primaryKey(),
-  username: text("username").unique().notNull(),
-  email: text("email").unique().notNull(),
-  password: text("password"),
-  googleId: text("google_id").unique(),
-  facebookId: text("facebook_id").unique(),
-  avatar: text("avatar"),
-  isEmailVerified: boolean("is_email_verified").default(false),
-  resetPasswordToken: text("reset_password_token").unique(),
-  resetPasswordExpires: timestamp("reset_password_expires"),
-  rememberMeToken: text("remember_me_token").unique(),
-  lastLoginAt: timestamp("last_login_at"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 export const lessons = pgTable("lessons", {
@@ -730,15 +768,14 @@ export const insertUserSchema = createInsertSchema(users, {
     .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
     .regex(/[a-z]/, "Password must contain at least one lowercase letter")
     .regex(/[0-9]/, "Password must contain at least one number")
-    .regex(/[^A-Za-z0-9]/, "Password must contain at least one special character")
-    .optional(), // Optional because social login users won't have a password
+    .regex(/[^A-Za-z0-9]/, "Password must contain at least one special character"),
 });
 
 export const selectUserSchema = createSelectSchema(users);
 
 export type SelectUser = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
-export type User = Omit<SelectUser, "password" | "resetPasswordToken" | "resetPasswordExpires" | "rememberMeToken">;
+export type User = Omit<SelectUser, "password">;
 
 // Add validation schemas for difficulty preferences
 export const difficultyLevels = ["beginner", "intermediate", "advanced"] as const;

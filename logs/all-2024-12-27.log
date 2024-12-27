@@ -2832,3 +2832,18 @@
 2024-12-27 12:23:12:2312 [35mhttp[39m: [35mGET /src/components/ui/textarea.tsx 304 1ms[39m
 2024-12-27 12:23:12:2312 [35mhttp[39m: [35mGET /api/user 401 1ms[39m
 2024-12-27 12:23:12:2312 [35mhttp[39m: [35mGET /api/user 401 in 2ms[39m
+2024-12-27 12:31:32:3132 [31merror[39m: [31mApplication Error column "google_id" does not exist[39m
+2024-12-27 12:31:32:3132 [35mhttp[39m: [35mPOST /api/login 500 803ms[39m
+2024-12-27 12:31:32:3132 [35mhttp[39m: [35mPOST /api/login 500 in 804ms :: {"message":"column \"google_id\" does not exist…[39m
+2024-12-27 12:31:32:3132 [35mhttp[39m: [35mGET /api/user 401 1ms[39m
+2024-12-27 12:31:32:3132 [35mhttp[39m: [35mGET /api/user 401 in 2ms[39m
+2024-12-27 12:31:34:3134 [31merror[39m: [31mApplication Error column "google_id" does not exist[39m
+2024-12-27 12:31:34:3134 [35mhttp[39m: [35mPOST /api/login 500 116ms[39m
+2024-12-27 12:31:34:3134 [35mhttp[39m: [35mPOST /api/login 500 in 117ms :: {"message":"column \"google_id\" does not exist…[39m
+2024-12-27 12:31:34:3134 [35mhttp[39m: [35mGET /api/user 401 1ms[39m
+2024-12-27 12:31:34:3134 [35mhttp[39m: [35mGET /api/user 401 in 1ms[39m
+2024-12-27 12:31:44:3144 [31merror[39m: [31mApplication Error column "google_id" does not exist[39m
+2024-12-27 12:31:44:3144 [35mhttp[39m: [35mPOST /api/login 500 118ms[39m
+2024-12-27 12:31:44:3144 [35mhttp[39m: [35mPOST /api/login 500 in 118ms :: {"message":"column \"google_id\" does not exist…[39m
+2024-12-27 12:31:44:3144 [35mhttp[39m: [35mGET /api/user 401 1ms[39m
+2024-12-27 12:31:44:3144 [35mhttp[39m: [35mGET /api/user 401 in 1ms[39m

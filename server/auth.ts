@@ -1,17 +1,15 @@
 import passport from "passport";
 import { IVerifyOptions, Strategy as LocalStrategy } from "passport-local";
-import { Strategy as GoogleStrategy } from "passport-google-oauth20";
-import { Strategy as FacebookStrategy } from "passport-facebook";
 import { type Express } from "express";
 import session from "express-session";
 import createMemoryStore from "memorystore";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
-import nodemailer from "nodemailer";
 import { users, insertUserSchema, type SelectUser } from "@db/schema";
 import { db } from "@db";
-import { eq, or, and, gte } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import jwt from "jsonwebtoken";
+import nodemailer from "nodemailer";
 
 const scryptAsync = promisify(scrypt);
 const JWT_SECRET = process.env.REPL_ID || "language-learning-secret";
@@ -34,6 +32,12 @@ const crypto = {
   },
 };
 
+declare global {
+  namespace Express {
+    interface User extends Omit<SelectUser, "password"> {}
+  }
+}
+
 // Email service setup
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
@@ -45,11 +49,6 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-declare global {
-  namespace Express {
-    interface User extends Omit<SelectUser, "password"> {}
-  }
-}
 
 export function setupAuth(app: Express) {
   const MemoryStore = createMemoryStore(session);
@@ -70,14 +69,13 @@ export function setupAuth(app: Express) {
   app.use(passport.initialize());
   app.use(passport.session());
 
-  // Local Strategy
   passport.use(
     new LocalStrategy(async (username, password, done) => {
       try {
         const [user] = await db
           .select()
           .from(users)
-          .where(or(eq(users.username, username), eq(users.email, username)))
+          .where(eq(users.username, username))
           .limit(1);
 
         if (!user) {
@@ -93,129 +91,13 @@ export function setupAuth(app: Express) {
           return done(null, false, { message: "Invalid username or password" });
         }
 
-        // Update last login
-        await db
-          .update(users)
-          .set({ lastLoginAt: new Date() })
-          .where(eq(users.id, user.id));
-
         return done(null, user);
       } catch (err) {
+        console.error("Login error:", err);
         return done(err);
       }
     })
   );
-
-  // Google Strategy
-  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
-    passport.use(
-      new GoogleStrategy(
-        {
-          clientID: process.env.GOOGLE_CLIENT_ID,
-          clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-          callbackURL: "/api/auth/google/callback",
-        },
-        async (accessToken, refreshToken, profile, done) => {
-          try {
-            let [user] = await db
-              .select()
-              .from(users)
-              .where(eq(users.googleId, profile.id))
-              .limit(1);
-
-            if (!user) {
-              // Check if email exists
-              [user] = await db
-                .select()
-                .from(users)
-                .where(eq(users.email, profile.emails?.[0]?.value || ""))
-                .limit(1);
-
-              if (user) {
-                // Link Google to existing account
-                await db
-                  .update(users)
-                  .set({ googleId: profile.id })
-                  .where(eq(users.id, user.id));
-              } else {
-                // Create new user
-                [user] = await db
-                  .insert(users)
-                  .values({
-                    username: profile.displayName,
-                    email: profile.emails?.[0]?.value || "",
-                    googleId: profile.id,
-                    avatar: profile.photos?.[0]?.value,
-                    isEmailVerified: true,
-                  })
-                  .returning();
-              }
-            }
-
-            done(null, user);
-          } catch (err) {
-            done(err);
-          }
-        }
-      )
-    );
-  }
-
-  // Facebook Strategy
-  if (process.env.FACEBOOK_APP_ID && process.env.FACEBOOK_APP_SECRET) {
-    passport.use(
-      new FacebookStrategy(
-        {
-          clientID: process.env.FACEBOOK_APP_ID,
-          clientSecret: process.env.FACEBOOK_APP_SECRET,
-          callbackURL: "/api/auth/facebook/callback",
-          profileFields: ["id", "emails", "name", "picture"],
-        },
-        async (accessToken, refreshToken, profile, done) => {
-          try {
-            let [user] = await db
-              .select()
-              .from(users)
-              .where(eq(users.facebookId, profile.id))
-              .limit(1);
-
-            if (!user) {
-              // Check if email exists
-              [user] = await db
-                .select()
-                .from(users)
-                .where(eq(users.email, profile.emails?.[0]?.value || ""))
-                .limit(1);
-
-              if (user) {
-                // Link Facebook to existing account
-                await db
-                  .update(users)
-                  .set({ facebookId: profile.id })
-                  .where(eq(users.id, user.id));
-              } else {
-                // Create new user
-                [user] = await db
-                  .insert(users)
-                  .values({
-                    username: `${profile.name?.givenName} ${profile.name?.familyName}`,
-                    email: profile.emails?.[0]?.value || "",
-                    facebookId: profile.id,
-                    avatar: profile.photos?.[0]?.value,
-                    isEmailVerified: true,
-                  })
-                  .returning();
-              }
-            }
-
-            done(null, user);
-          } catch (err) {
-            done(err);
-          }
-        }
-      )
-    );
-  }
 
   passport.serializeUser((user, done) => {
     done(null, user.id);
@@ -239,34 +121,6 @@ export function setupAuth(app: Express) {
     }
   });
 
-  // Social auth routes
-  app.get(
-    "/api/auth/google",
-    passport.authenticate("google", { scope: ["profile", "email"] })
-  );
-
-  app.get(
-    "/api/auth/google/callback",
-    passport.authenticate("google", { failureRedirect: "/login" }),
-    (req, res) => {
-      res.redirect("/");
-    }
-  );
-
-  app.get(
-    "/api/auth/facebook",
-    passport.authenticate("facebook", { scope: ["email"] })
-  );
-
-  app.get(
-    "/api/auth/facebook/callback",
-    passport.authenticate("facebook", { failureRedirect: "/login" }),
-    (req, res) => {
-      res.redirect("/");
-    }
-  );
-
-  // Register endpoint
   app.post("/api/register", async (req, res, next) => {
     try {
       const result = insertUserSchema.safeParse(req.body);
@@ -277,6 +131,9 @@ export function setupAuth(app: Express) {
       }
 
       const { username, email, password } = result.data;
+      if (!password) {
+        return res.status(400).send("Password is required");
+      }
 
       // Check if username or email already exists
       const [existingUser] = await db
@@ -293,7 +150,7 @@ export function setupAuth(app: Express) {
       }
 
       // Hash password and create user
-      const hashedPassword = await crypto.hash(password!);
+      const hashedPassword = await crypto.hash(password);
       const [newUser] = await db
         .insert(users)
         .values({
@@ -328,35 +185,22 @@ export function setupAuth(app: Express) {
     }
   });
 
-  // Login endpoint
   app.post("/api/login", (req, res, next) => {
     passport.authenticate(
       "local",
       async (err: Error | null, user: Express.User | false, info: IVerifyOptions) => {
         if (err) {
+          console.error("Authentication error:", err);
           return next(err);
         }
         if (!user) {
           return res.status(401).send(info.message || "Authentication failed");
         }
 
-        // Handle remember me
-        if (req.body.rememberMe) {
-          const token = randomBytes(32).toString("hex");
-          await db
-            .update(users)
-            .set({ rememberMeToken: token })
-            .where(eq(users.id, user.id));
-
-          res.cookie("rememberMe", token, {
-            path: "/",
-            httpOnly: true,
-            maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-          });
-        }
 
         req.login(user, (err) => {
           if (err) {
+            console.error("Login error:", err);
             return next(err);
           }
           return res.json({ message: "Login successful" });
@@ -477,11 +321,6 @@ export function setupAuth(app: Express) {
 
   // Logout
   app.post("/api/logout", (req, res) => {
-    // Clear remember me token
-    if (req.cookies?.rememberMe) {
-      res.clearCookie("rememberMe");
-    }
-
     req.logout((err) => {
       if (err) {
         return res.status(500).send("Logout failed");
