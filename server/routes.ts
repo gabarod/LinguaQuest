@@ -8,9 +8,78 @@ import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { format, subDays } from "date-fns";
 import { ChatService } from "./services/chatService";
 import { BuddyService } from "./services/buddyService";
+import multer from "multer";
+import { Readable } from "stream";
+import { pipeline } from "stream/promises";
 
 export function registerRoutes(app: Express): Server {
   setupAuth(app);
+
+  // Configure multer for handling audio file uploads
+  const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+      fileSize: 10 * 1024 * 1024, // 10MB max file size
+    },
+  });
+
+  // Pronunciation analysis endpoint
+  app.post("/api/pronunciation/analyze", upload.single("audio"), async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    if (!req.file || !req.body.text || !req.body.language) {
+      return res.status(400).send("Missing required fields");
+    }
+
+    try {
+      // Prepare the form data for the AI API
+      const formData = new FormData();
+      const audioBlob = new Blob([req.file.buffer], { type: req.file.mimetype });
+      formData.append("audio", audioBlob);
+      formData.append("text", req.body.text);
+      formData.append("language", req.body.language);
+
+      // Call the AI API for pronunciation analysis
+      const response = await fetch("https://api.perplexity.ai/audio/pronunciation", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const analysis = await response.json();
+
+      // Process and format the analysis results
+      const feedback = {
+        score: analysis.score * 100,
+        feedback: analysis.feedback,
+        correctPhonemes: analysis.phonemes.correct,
+        incorrectPhonemes: analysis.phonemes.incorrect,
+      };
+
+      // Save the analysis results for tracking progress
+      await db.insert(userProgress).values({
+        userId,
+        type: "pronunciation",
+        score: feedback.score,
+        details: feedback,
+        completedAt: new Date(),
+      });
+
+      res.json(feedback);
+    } catch (error) {
+      console.error("Error analyzing pronunciation:", error);
+      res.status(500).send("Failed to analyze pronunciation");
+    }
+  });
 
   // Get all lessons
   app.get("/api/lessons", async (req, res) => {
@@ -558,8 +627,8 @@ export function registerRoutes(app: Express): Server {
         weeklyProgress: weeklyProgress.reverse(),
         skillDistribution,
         totalPoints: userStat?.totalPoints || 0,
-        accuracy: accuracyStats[0]?.total > 0 
-          ? (accuracyStats[0].correct / accuracyStats[0].total * 100) 
+        accuracy: accuracyStats[0]?.total > 0
+          ? (accuracyStats[0].correct / accuracyStats[0].total * 100)
           : 0,
         streak: userStat?.streak || 0,
       });
