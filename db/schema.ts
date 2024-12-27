@@ -355,6 +355,127 @@ export const skillProgression = pgTable("skill_progression", {
   }[]>().default([]),
 });
 
+export const pronunciationAttempts = pgTable("pronunciation_attempts", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  exerciseId: integer("exercise_id")
+    .references(() => exercises.id),
+  audioUrl: text("audio_url"),
+  targetText: text("target_text").notNull(),
+  language: text("language")
+    .notNull()
+    .references(() => languages.code),
+  score: decimal("score").notNull(),
+  feedback: json("feedback").$type<{
+    overall: number;
+    phonemes: {
+      phoneme: string;
+      score: number;
+      feedback: string;
+    }[];
+    suggestions: string[];
+  }>().notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const pronunciationMetrics = pgTable("pronunciation_metrics", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  language: text("language")
+    .notNull()
+    .references(() => languages.code),
+  averageScore: decimal("average_score").notNull(),
+  totalAttempts: integer("total_attempts").notNull(),
+  improvementRate: decimal("improvement_rate"),
+  lastUpdated: timestamp("last_updated").defaultNow(),
+});
+
+export const communityPosts = pgTable("community_posts", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  content: text("content").notNull(),
+  targetLanguage: text("target_language")
+    .notNull()
+    .references(() => languages.code),
+  tags: text("tags").array(),
+  likes: integer("likes").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const postComments = pgTable("post_comments", {
+  id: serial("id").primaryKey(),
+  postId: integer("post_id")
+    .notNull()
+    .references(() => communityPosts.id),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const postLikes = pgTable("post_likes", {
+  id: serial("id").primaryKey(),
+  postId: integer("post_id")
+    .notNull()
+    .references(() => communityPosts.id),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => ({
+  uniqueLike: primaryKey({ columns: [table.userId, table.postId] }),
+}));
+
+export const quizzes = pgTable("quizzes", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  language: text("language")
+    .notNull()
+    .references(() => languages.code),
+  difficulty: text("difficulty").notNull(),
+  type: text("type").notNull(), // vocabulary, grammar, comprehension, etc.
+  questions: json("questions").$type<{
+    id: number;
+    question: string;
+    options: string[];
+    correctAnswer: string;
+    explanation: string;
+    points: number;
+  }[]>().notNull(),
+  timeLimit: integer("time_limit"), // in seconds
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const quizAttempts = pgTable("quiz_attempts", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  quizId: integer("quiz_id")
+    .notNull()
+    .references(() => quizzes.id),
+  score: integer("score").notNull(),
+  maxScore: integer("max_score").notNull(),
+  answers: json("answers").$type<{
+    questionId: number;
+    answer: string;
+    correct: boolean;
+    timeSpent: number;
+  }[]>().notNull(),
+  completedAt: timestamp("completed_at").defaultNow(),
+});
+
 export const userRelations = relations(users, ({ many }) => ({
   progress: many(userProgress),
   stats: many(userStats),
@@ -366,6 +487,8 @@ export const userRelations = relations(users, ({ many }) => ({
   learningPaths: many(learningPaths),
   recommendations: many(aiRecommendations),
   skillProgression: many(skillProgression),
+  pronunciationAttempts: many(pronunciationAttempts),
+  pronunciationMetrics: many(pronunciationMetrics),
 }));
 
 export const lessonRelations = relations(lessons, ({ many }) => ({
@@ -484,7 +607,7 @@ export const sessionFeedbackRelations = relations(sessionFeedback, ({ one }) => 
   }),
 }));
 
-export const flashcardRelations = relations(flashcards, ({ one, many }) => ({
+export const flashcardsRelations = relations(flashcards, ({ one, many }) => ({
   user: one(users, {
     fields: [flashcards.userId],
     references: [users.id],
@@ -531,6 +654,71 @@ export const skillProgressionRelations = relations(skillProgression, ({ one }) =
   path: one(learningPaths, {
     fields: [skillProgression.pathId],
     references: [learningPaths.id],
+  }),
+}));
+
+export const pronunciationAttemptsRelations = relations(pronunciationAttempts, ({ one }) => ({
+  user: one(users, {
+    fields: [pronunciationAttempts.userId],
+    references: [users.id],
+  }),
+  exercise: one(exercises, {
+    fields: [pronunciationAttempts.exerciseId],
+    references: [exercises.id],
+  }),
+}));
+
+export const pronunciationMetricsRelations = relations(pronunciationMetrics, ({ one }) => ({
+  user: one(users, {
+    fields: [pronunciationMetrics.userId],
+    references: [users.id],
+  }),
+}));
+
+
+export const communityPostRelations = relations(communityPosts, ({ one, many }) => ({
+  user: one(users, {
+    fields: [communityPosts.userId],
+    references: [users.id],
+  }),
+  comments: many(postComments),
+  likes: many(postLikes),
+}));
+
+export const postCommentRelations = relations(postComments, ({ one }) => ({
+  post: one(communityPosts, {
+    fields: [postComments.postId],
+    references: [communityPosts.id],
+  }),
+  user: one(users, {
+    fields: [postComments.userId],
+    references: [users.id],
+  }),
+}));
+
+export const postLikeRelations = relations(postLikes, ({ one }) => ({
+  post: one(communityPosts, {
+    fields: [postLikes.postId],
+    references: [communityPosts.id],
+  }),
+  user: one(users, {
+    fields: [postLikes.userId],
+    references: [users.id],
+  }),
+}));
+
+export const quizzesRelations = relations(quizzes, ({ many }) => ({
+  attempts: many(quizAttempts),
+}));
+
+export const quizAttemptsRelations = relations(quizAttempts, ({ one }) => ({
+  user: one(users, {
+    fields: [quizAttempts.userId],
+    references: [users.id],
+  }),
+  quiz: one(quizzes, {
+    fields: [quizAttempts.quizId],
+    references: [quizzes.id],
   }),
 }));
 
@@ -612,132 +800,3 @@ export type InsertFlashcard = typeof flashcards.$inferInsert;
 export type SelectFlashcard = typeof flashcards.$inferSelect;
 export type InsertFlashcardProgress = typeof flashcardProgress.$inferInsert;
 export type SelectFlashcardProgress = typeof flashcardProgress.$inferSelect;
-
-export const communityPosts = pgTable("community_posts", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id")
-    .notNull()
-    .references(() => users.id),
-  content: text("content").notNull(),
-  targetLanguage: text("target_language")
-    .notNull()
-    .references(() => languages.code),
-  tags: text("tags").array(),
-  likes: integer("likes").default(0),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const postComments = pgTable("post_comments", {
-  id: serial("id").primaryKey(),
-  postId: integer("post_id")
-    .notNull()
-    .references(() => communityPosts.id),
-  userId: integer("user_id")
-    .notNull()
-    .references(() => users.id),
-  content: text("content").notNull(),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const postLikes = pgTable("post_likes", {
-  id: serial("id").primaryKey(),
-  postId: integer("post_id")
-    .notNull()
-    .references(() => communityPosts.id),
-  userId: integer("user_id")
-    .notNull()
-    .references(() => users.id),
-  createdAt: timestamp("created_at").defaultNow(),
-}, (table) => ({
-  uniqueLike: primaryKey({ columns: [table.userId, table.postId] }),
-}));
-
-// Add relations for the new tables
-export const communityPostRelations = relations(communityPosts, ({ one, many }) => ({
-  user: one(users, {
-    fields: [communityPosts.userId],
-    references: [users.id],
-  }),
-  comments: many(postComments),
-  likes: many(postLikes),
-}));
-
-export const postCommentRelations = relations(postComments, ({ one }) => ({
-  post: one(communityPosts, {
-    fields: [postComments.postId],
-    references: [communityPosts.id],
-  }),
-  user: one(users, {
-    fields: [postComments.userId],
-    references: [users.id],
-  }),
-}));
-
-export const postLikeRelations = relations(postLikes, ({ one }) => ({
-  post: one(communityPosts, {
-    fields: [postLikes.postId],
-    references: [communityPosts.id],
-  }),
-  user: one(users, {
-    fields: [postLikes.userId],
-    references: [users.id],
-  }),
-}));
-
-export const quizzes = pgTable("quizzes", {
-  id: serial("id").primaryKey(),
-  title: text("title").notNull(),
-  description: text("description").notNull(),
-  language: text("language")
-    .notNull()
-    .references(() => languages.code),
-  difficulty: text("difficulty").notNull(),
-  type: text("type").notNull(), // vocabulary, grammar, comprehension, etc.
-  questions: json("questions").$type<{
-    id: number;
-    question: string;
-    options: string[];
-    correctAnswer: string;
-    explanation: string;
-    points: number;
-  }[]>().notNull(),
-  timeLimit: integer("time_limit"), // in seconds
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-export const quizAttempts = pgTable("quiz_attempts", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id")
-    .notNull()
-    .references(() => users.id),
-  quizId: integer("quiz_id")
-    .notNull()
-    .references(() => quizzes.id),
-  score: integer("score").notNull(),
-  maxScore: integer("max_score").notNull(),
-  answers: json("answers").$type<{
-    questionId: number;
-    answer: string;
-    correct: boolean;
-    timeSpent: number;
-  }[]>().notNull(),
-  completedAt: timestamp("completed_at").defaultNow(),
-});
-
-export const quizzesRelations = relations(quizzes, ({ many }) => ({
-  attempts: many(quizAttempts),
-}));
-
-export const quizAttemptsRelations = relations(quizAttempts, ({ one }) => ({
-  user: one(users, {
-    fields: [quizAttempts.userId],
-    references: [users.id],
-  }),
-  quiz: one(quizzes, {
-    fields: [quizAttempts.quizId],
-    references: [quizzes.id],
-  }),
-}));

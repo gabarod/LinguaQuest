@@ -1,8 +1,9 @@
 import { Switch, Route } from "wouter";
+import { Card, CardContent } from "@/components/ui/card";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
-import { Loader2 } from "lucide-react";
 import { useUser } from "@/hooks/use-user";
 import AuthPage from "./pages/AuthPage";
 import HomePage from "./pages/HomePage";
@@ -16,6 +17,7 @@ import { FlashcardsPage } from "./pages/FlashcardsPage";
 import { OnboardingTutorial } from "./components/OnboardingTutorial";
 import { ProgressCelebration } from "./components/ProgressCelebration";
 import QuizPage from "./pages/QuizPage";
+import PronunciationPractice from "./pages/PronunciationPractice";
 
 function App() {
   const { user, isLoading } = useUser();
@@ -45,6 +47,7 @@ function App() {
         <Route path="/language-exchange" component={LanguageExchangePage} />
         <Route path="/community" component={CommunityPage} />
         <Route path="/quiz" component={QuizPage} />
+        <Route path="/pronunciation" component={PronunciationPractice} />
       </Switch>
       <ProgressCelebration />
     </>
