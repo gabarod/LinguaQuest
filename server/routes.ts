@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { db } from "@db";
 import { sql } from "drizzle-orm";
-import { lessons, exercises, languageProgress, users, dailyChallenges } from "@db/schema";
+import { lessons, exercises, languageProgress, users, dailyChallenges, supportedLanguages } from "@db/schema";
 import { eq, and, desc, gte } from "drizzle-orm";
 import learningPathRouter from "./routes/learningPath";
 import { logger } from './services/loggingService';
@@ -522,5 +522,4 @@ export function registerRoutes(app: Express): Server {
   });
 
   return httpServer;
-
 }
