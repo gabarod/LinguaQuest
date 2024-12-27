@@ -6,6 +6,7 @@ import {
   boolean,
   timestamp,
   primaryKey,
+  json,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { relations } from "drizzle-orm";
@@ -63,10 +64,33 @@ export const userStats = pgTable("user_stats", {
   lastActivity: timestamp("last_activity").defaultNow(),
 });
 
-// Define relationships
+export const milestones = pgTable("milestones", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  type: text("type").notNull(),
+  points: integer("points").notNull(),
+  position: json("position").notNull().$type<{ x: number; y: number }>(),
+  requiredLessons: integer("required_lessons").notNull(),
+  requiredPoints: integer("required_points").notNull(),
+});
+
+export const userMilestones = pgTable("user_milestones", {
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  milestoneId: integer("milestone_id")
+    .notNull()
+    .references(() => milestones.id),
+  unlockedAt: timestamp("unlocked_at").notNull().defaultNow(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.userId, table.milestoneId] }),
+}));
+
 export const userRelations = relations(users, ({ many }) => ({
   progress: many(userProgress),
   stats: many(userStats),
+  milestones: many(userMilestones),
 }));
 
 export const lessonRelations = relations(lessons, ({ many }) => ({
@@ -99,7 +123,22 @@ export const userStatsRelations = relations(userStats, ({ one }) => ({
   }),
 }));
 
-// Schema validation
+export const milestoneRelations = relations(milestones, ({ many }) => ({
+  userMilestones: many(userMilestones),
+}));
+
+export const userMilestoneRelations = relations(userMilestones, ({ one }) => ({
+  user: one(users, {
+    fields: [userMilestones.userId],
+    references: [users.id],
+  }),
+  milestone: one(milestones, {
+    fields: [userMilestones.milestoneId],
+    references: [milestones.id],
+  }),
+}));
+
+
 export const insertUserSchema = createInsertSchema(users, {
   email: z.string().email("Invalid email address"),
   password: z

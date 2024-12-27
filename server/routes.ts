@@ -3,8 +3,8 @@ import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { db } from "@db";
 import { sql } from "drizzle-orm";
-import { lessons, exercises, userProgress, userStats } from "@db/schema";
-import { eq } from "drizzle-orm";
+import { lessons, exercises, userProgress, userStats, milestones, userMilestones } from "@db/schema";
+import { eq, and } from "drizzle-orm";
 import { format, subDays } from "date-fns";
 
 export function registerRoutes(app: Express): Server {
@@ -187,6 +187,100 @@ export function registerRoutes(app: Express): Server {
     } catch (error) {
       console.error("Error fetching detailed progress:", error);
       res.status(500).send("Failed to fetch progress data");
+    }
+  });
+
+  // Get user's milestones with unlock status
+  app.get("/api/milestones", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    try {
+      // Get all milestones with user unlock status
+      const userMilestoneData = await db
+        .select({
+          id: milestones.id,
+          title: milestones.title,
+          description: milestones.description,
+          type: milestones.type,
+          points: milestones.points,
+          position: milestones.position,
+          requiredLessons: milestones.requiredLessons,
+          requiredPoints: milestones.requiredPoints,
+          unlockedAt: userMilestones.unlockedAt,
+        })
+        .from(milestones)
+        .leftJoin(
+          userMilestones,
+          and(
+            eq(userMilestones.milestoneId, milestones.id),
+            eq(userMilestones.userId, userId)
+          )
+        );
+
+      // Get user stats for milestone unlocking logic
+      const userStat = await db.query.userStats.findFirst({
+        where: eq(userStats.userId, userId),
+      });
+
+      // Determine which milestones are unlocked based on user progress
+      const milestonesWithStatus = userMilestoneData.map((milestone) => ({
+        ...milestone,
+        unlocked:
+          milestone.unlockedAt !== null ||
+          ((userStat?.lessonsCompleted ?? 0) >= milestone.requiredLessons &&
+            (userStat?.totalPoints ?? 0) >= milestone.requiredPoints),
+      }));
+
+      res.json(milestonesWithStatus);
+    } catch (error) {
+      console.error("Error fetching milestones:", error);
+      res.status(500).send("Failed to fetch milestones");
+    }
+  });
+
+  // Update milestone status (unlock)
+  app.post("/api/milestones/:id/unlock", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    const milestoneId = parseInt(req.params.id);
+
+    try {
+      const milestone = await db.query.milestones.findFirst({
+        where: eq(milestones.id, milestoneId),
+      });
+
+      if (!milestone) {
+        return res.status(404).send("Milestone not found");
+      }
+
+      const userStat = await db.query.userStats.findFirst({
+        where: eq(userStats.userId, userId),
+      });
+
+      // Check if user meets the requirements
+      if (
+        (userStat?.lessonsCompleted ?? 0) < milestone.requiredLessons ||
+        (userStat?.totalPoints ?? 0) < milestone.requiredPoints
+      ) {
+        return res.status(400).send("Requirements not met");
+      }
+
+      // Record the milestone unlock
+      await db.insert(userMilestones).values({
+        userId,
+        milestoneId,
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error unlocking milestone:", error);
+      res.status(500).send("Failed to unlock milestone");
     }
   });
 
