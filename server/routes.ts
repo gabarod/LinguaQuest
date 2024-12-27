@@ -460,7 +460,7 @@ export function registerRoutes(app: Express): Server {
         .where(eq(users.id, userId))
         .returning();
 
-      // Ensure language progress exists for this language
+      // Check if language progress exists
       const existingProgress = await db.query.languageProgress.findFirst({
         where: and(
           eq(languageProgress.userId, userId),
@@ -468,14 +468,19 @@ export function registerRoutes(app: Express): Server {
         ),
       });
 
+      // If no progress exists for this language, create it
       if (!existingProgress) {
         await db.insert(languageProgress).values({
           userId,
           language,
           lessonsCompleted: 0,
           totalPoints: 0,
+          weeklyXP: 0,
+          monthlyXP: 0,
           streak: 0,
           lastActivity: new Date(),
+          proficiencyLevel: 'beginner',
+          globalRank: 999
         });
       }
 

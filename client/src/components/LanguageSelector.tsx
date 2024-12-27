@@ -1,4 +1,5 @@
 import { useUser } from "@/hooks/use-user";
+import { useToast } from "@/hooks/use-toast";
 import {
   Select,
   SelectContent,
@@ -37,30 +38,39 @@ const languageNames: Record<string, string> = {
 
 export function LanguageSelector() {
   const { user, updateUserLanguage } = useUser();
+  const { toast } = useToast();
 
   const handleLanguageChange = async (language: string) => {
     try {
       await updateUserLanguage(language);
+      toast({
+        title: "Language updated",
+        description: `Your learning language has been changed to ${languageNames[language]}`,
+      });
     } catch (error) {
-      console.error("Failed to update language:", error);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to update language. Please try again.",
+      });
     }
   };
 
+  if (!user) return null;
+
   return (
     <Select
-      value={user?.targetLanguage}
+      value={user.targetLanguage}
       onValueChange={handleLanguageChange}
     >
       <SelectTrigger className="w-[180px]">
         <SelectValue placeholder="Select language">
-          <div className="flex items-center gap-2">
-            {user?.targetLanguage && (
-              <>
-                {languageIcons[user.targetLanguage]}
-                <span>{languageNames[user.targetLanguage]}</span>
-              </>
-            )}
-          </div>
+          {user.targetLanguage && (
+            <div className="flex items-center gap-2">
+              {languageIcons[user.targetLanguage]}
+              <span>{languageNames[user.targetLanguage]}</span>
+            </div>
+          )}
         </SelectValue>
       </SelectTrigger>
       <SelectContent>
