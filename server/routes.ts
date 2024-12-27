@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { db } from "@db";
 import { sql } from "drizzle-orm";
-import { lessons, exercises, userProgress, userStats, milestones, userMilestones, dailyChallenges, userChallengeAttempts, users, flashcards, flashcardProgress } from "@db/schema";
+import { lessons, exercises, userProgress, userStats, milestones, userMilestones, dailyChallenges, userChallengeAttempts, users, flashcards, flashcardProgress, difficultyPreferences } from "@db/schema";
 import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { format, subDays } from "date-fns";
 import { ChatService } from "./services/chatService";
@@ -11,6 +11,7 @@ import { BuddyService } from "./services/buddyService";
 import multer from "multer";
 import { Readable } from "stream";
 import { pipeline } from "stream/promises";
+import { BuddyRecommendationService } from "./services/buddyRecommendationService";
 
 // Add logging for flashcard operations
 const logFlashcardOperation = (operation: string, details: any) => {
@@ -709,6 +710,7 @@ export function registerRoutes(app: Express): Server {
   });
 
   // Buddy System Routes
+  // Update the potential buddies endpoint to use recommendation algorithm
   app.get("/api/buddies/potential", async (req, res) => {
     const userId = req.user?.id;
     if (!userId) {
@@ -721,8 +723,36 @@ export function registerRoutes(app: Express): Server {
     }
 
     try {
-      const potentialBuddies = await BuddyService.findPotentialBuddies(userId, language);
-      res.json(potentialBuddies);
+      const recommendedBuddies = await BuddyRecommendationService.getRecommendedBuddies(
+        userId,
+        language
+      );
+
+      // Get full user details for recommended buddies
+      const buddyDetails = await Promise.all(
+        recommendedBuddies.map(async (rec) => {
+          const [buddy] = await db
+            .select({
+              id: users.id,
+              username: users.username,
+              preferences: difficultyPreferences.skillLevels,
+            })
+            .from(users)
+            .leftJoin(
+              difficultyPreferences,
+              eq(difficultyPreferences.userId, users.id)
+            )
+            .where(eq(users.id, rec.userId));
+
+          return {
+            ...buddy,
+            matchScore: rec.score,
+            matchReasons: rec.matchReason,
+          };
+        })
+      );
+
+      res.json(buddyDetails);
     } catch (error) {
       console.error("Error finding potential buddies:", error);
       res.status(500).send("Failed to find potential buddies");
@@ -935,7 +965,7 @@ export function registerRoutes(app: Express): Server {
               content: `You are a language learning expert. Generate ${count} vocabulary flashcards in ${language} from the given text. For each word, provide:
               1. The term in the target language
               2. Its definition in English
-              3. Example sentences
+              3.Example sentences
               4. Usage context
               Format as JSON array.`
             },

@@ -9,16 +9,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, UserPlus, Users } from "lucide-react";
+import { Loader2, UserPlus, Users, Star } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { Progress } from "@/components/ui/progress";
 
 interface BuddyProfile {
   id: number;
   username: string;
-  targetLanguage: string;
-  nativeLanguage: string;
-  proficiencyLevel: string;
-  lastActive: string;
+  preferences?: {
+    vocabulary: number;
+    grammar: number;
+    pronunciation: number;
+    comprehension: number;
+  };
+  matchScore: number;
+  matchReasons: string[];
 }
 
 export function BuddyFinder() {
@@ -102,27 +107,59 @@ export function BuddyFinder() {
               {potentialBuddies?.map((buddy) => (
                 <Card key={buddy.id}>
                   <CardContent className="pt-6">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="font-semibold">{buddy.username}</h3>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          Native: {buddy.nativeLanguage}
-                        </p>
-                        <p className="text-sm text-muted-foreground">
-                          Learning: {buddy.targetLanguage} ({buddy.proficiencyLevel})
-                        </p>
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="font-semibold">{buddy.username}</h3>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Star className="h-4 w-4 text-yellow-500" />
+                            <span className="text-sm text-muted-foreground">
+                              {Math.round(buddy.matchScore)}% Match
+                            </span>
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          onClick={() => sendRequest.mutate(buddy.id)}
+                          disabled={sendRequest.isPending}
+                        >
+                          {sendRequest.isPending ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <UserPlus className="h-4 w-4" />
+                          )}
+                        </Button>
                       </div>
-                      <Button
-                        size="sm"
-                        onClick={() => sendRequest.mutate(buddy.id)}
-                        disabled={sendRequest.isPending}
-                      >
-                        {sendRequest.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <UserPlus className="h-4 w-4" />
-                        )}
-                      </Button>
+
+                      <Progress value={buddy.matchScore} className="h-2" />
+
+                      {buddy.preferences && (
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium">Skill Levels:</p>
+                          <div className="grid grid-cols-2 gap-2 text-sm">
+                            {Object.entries(buddy.preferences).map(([skill, level]) => (
+                              <div key={skill} className="flex justify-between">
+                                <span className="capitalize">{skill}:</span>
+                                <span className="text-muted-foreground">{level}/5</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium">Why you match:</p>
+                        <div className="flex flex-wrap gap-1">
+                          {buddy.matchReasons.map((reason) => (
+                            <span
+                              key={reason}
+                              className="text-xs bg-accent px-2 py-1 rounded-full"
+                            >
+                              {reason}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
