@@ -4147,3 +4147,4 @@
 2024-12-27 14:37:15:3715 [35mhttp[39m: [35mPOST /api/login 401 in 23ms :: {"success":false,"message":"Usuario o contraseña…[39m
 2024-12-27 14:37:21:3721 [35mhttp[39m: [35mPOST /api/login 200 83ms[39m
 2024-12-27 14:37:21:3721 [35mhttp[39m: [35mPOST /api/login 200 in 84ms :: {"success":true,"message":"Inicio de sesión exit…[39m
+2024-12-27 14:49:09:499 [32minfo[39m: [32mLanguage Exchange Service initialized[39m

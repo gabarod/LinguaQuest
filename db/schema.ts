@@ -12,31 +12,16 @@ import {
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { relations } from "drizzle-orm";
 
-// Supported languages type
-export const supportedLanguages = [
-  "en",
-  "es",
-  "fr",
-  "de",
-  "it"
-] as const;
-
-export type SupportedLanguage = typeof supportedLanguages[number];
-
 // Users and Authentication
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").unique().notNull(),
   email: text("email").unique(),
   password: text("password").notNull(),
-  avatar: text("avatar"),
-  isEmailVerified: boolean("is_email_verified").default(false),
-  lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// Schema validation for users
 export const insertUserSchema = createInsertSchema(users, {
   username: z.string().min(3, "Username must be at least 3 characters").max(20, "Username must be less than 20 characters"),
   password: z.string()
@@ -49,11 +34,92 @@ export const insertUserSchema = createInsertSchema(users, {
 });
 
 export const selectUserSchema = createSelectSchema(users);
-
-// User types
 export type SelectUser = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
-export type User = Omit<SelectUser, "password">;
+
+// Relation declarations
+export const usersRelations = relations(users, ({ many }) => ({
+  progress: many(userProgress),
+  stats: many(userStats),
+  pronunciationAttempts: many(pronunciationAttempts),
+}));
+
+// Learning content tables
+export const lessons = pgTable("lessons", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description"),
+  type: text("type").notNull(),
+  level: text("level").notNull(),
+  language: text("language").notNull(),
+  points: integer("points").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const exercises = pgTable("exercises", {
+  id: serial("id").primaryKey(),
+  lessonId: integer("lesson_id").references(() => lessons.id).notNull(),
+  type: text("type").notNull(),
+  question: text("question").notNull(),
+  correctAnswer: text("correct_answer").notNull(),
+  options: jsonb("options"),
+  points: integer("points").notNull(),
+});
+
+export const userProgress = pgTable("user_progress", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  lessonId: integer("lesson_id").references(() => lessons.id).notNull(),
+  completed: boolean("completed").default(false),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const userStats = pgTable("user_stats", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  lessonsCompleted: integer("lessons_completed").default(0),
+  totalPoints: integer("total_points").default(0),
+  weeklyXP: integer("weekly_xp").default(0),
+  monthlyXP: integer("monthly_xp").default(0),
+  streak: integer("streak").default(0),
+  globalRank: integer("global_rank"),
+  lastActivity: timestamp("last_activity").defaultNow(),
+});
+
+export const pronunciationAttempts = pgTable("pronunciation_attempts", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  exerciseId: integer("exercise_id").references(() => exercises.id),
+  targetText: text("target_text").notNull(),
+  language: text("language").notNull(),
+  audioUrl: text("audio_url").notNull(),
+  transcription: text("transcription"),
+  score: decimal("score", { precision: 5, scale: 2 }).notNull(),
+  feedback: jsonb("feedback"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const lessonsRelations = relations(lessons, ({ many }) => ({
+  exercises: many(exercises),
+  progress: many(userProgress),
+}));
+
+// Schema validation for pronunciation attempts
+export const insertPronunciationAttemptSchema = createInsertSchema(pronunciationAttempts);
+export const selectPronunciationAttemptSchema = createSelectSchema(pronunciationAttempts);
+
+// Supported languages type
+export const supportedLanguages = [
+  "en",
+  "es",
+  "fr",
+  "de",
+  "it"
+] as const;
+
+export type SupportedLanguage = typeof supportedLanguages[number];
+
 
 // Buddy system tables
 export const buddyConnections = pgTable("buddy_connections", {
@@ -99,18 +165,6 @@ export const performanceMetrics = pgTable("performance_metrics", {
   timestamp: timestamp("timestamp").defaultNow(),
 });
 
-export const pronunciationAttempts = pgTable("pronunciation_attempts", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id").references(() => users.id).notNull(),
-  exerciseId: integer("exercise_id").references(() => exercises.id),
-  targetText: text("target_text").notNull(),
-  language: text("language").notNull(),
-  audioUrl: text("audio_url").notNull(),
-  transcription: text("transcription"),
-  score: decimal("score", { precision: 5, scale: 2 }).notNull(),
-  feedback: jsonb("feedback"), // Detailed feedback from AI analysis
-  createdAt: timestamp("created_at").defaultNow(),
-});
 
 export const difficultyPreferences = pgTable("difficulty_preferences", {
   id: serial("id").primaryKey(),
@@ -120,48 +174,7 @@ export const difficultyPreferences = pgTable("difficulty_preferences", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// Learning content tables
-export const lessons = pgTable("lessons", {
-  id: serial("id").primaryKey(),
-  title: text("title").notNull(),
-  description: text("description"),
-  type: text("type").notNull(), // vocabulary, grammar, pronunciation, etc.
-  level: text("level").notNull(), // beginner, intermediate, advanced
-  language: text("language").notNull(),
-  points: integer("points").notNull(),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-export const exercises = pgTable("exercises", {
-  id: serial("id").primaryKey(),
-  lessonId: integer("lesson_id").references(() => lessons.id).notNull(),
-  type: text("type").notNull(), // multiple-choice, fill-in-blank, pronunciation, etc.
-  question: text("question").notNull(),
-  correctAnswer: text("correct_answer").notNull(),
-  options: jsonb("options"), // for multiple choice questions
-  points: integer("points").notNull(),
-});
-
-export const userProgress = pgTable("user_progress", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id").references(() => users.id).notNull(),
-  lessonId: integer("lesson_id").references(() => lessons.id).notNull(),
-  completed: boolean("completed").default(false),
-  completedAt: timestamp("completed_at"),
-  createdAt: timestamp("created_at").defaultNow(),
-});
-
-export const userStats = pgTable("user_stats", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id").references(() => users.id).notNull(),
-  lessonsCompleted: integer("lessons_completed").default(0),
-  totalPoints: integer("total_points").default(0),
-  weeklyXP: integer("weekly_xp").default(0),
-  monthlyXP: integer("monthly_xp").default(0),
-  streak: integer("streak").default(0),
-  globalRank: integer("global_rank"),
-  lastActivity: timestamp("last_activity").defaultNow(),
-});
+// Learning content tables (continued from edited snippet)
 
 // Language and localization tables
 export const languages = pgTable("languages", {
@@ -337,6 +350,3 @@ export const flashcardProgress = pgTable("flashcard_progress", {
   lastReviewedAt: timestamp("last_reviewed_at").defaultNow(),
   nextReviewAt: timestamp("next_review_at").notNull(),
 });
-
-export const insertPronunciationAttemptSchema = createInsertSchema(pronunciationAttempts);
-export const selectPronunciationAttemptSchema = createSelectSchema(pronunciationAttempts);

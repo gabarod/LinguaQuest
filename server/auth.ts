@@ -31,7 +31,7 @@ const crypto = {
 
 declare global {
   namespace Express {
-    interface User extends Omit<SelectUser, "password"> {}
+    interface User extends SelectUser {}
   }
 }
 
@@ -57,8 +57,6 @@ export function setupAuth(app: Express) {
   passport.use(
     new LocalStrategy(async (username, password, done) => {
       try {
-        console.log(`[Auth] Login attempt for username: ${username}`);
-
         const [user] = await db
           .select()
           .from(users)
@@ -66,20 +64,16 @@ export function setupAuth(app: Express) {
           .limit(1);
 
         if (!user) {
-          console.log(`[Auth] User not found: ${username}`);
-          return done(null, false, { message: "Usuario o contraseña incorrectos" });
+          return done(null, false, { message: "Invalid username or password" });
         }
 
         const isMatch = await crypto.compare(password, user.password);
         if (!isMatch) {
-          console.log(`[Auth] Invalid password for user: ${username}`);
-          return done(null, false, { message: "Usuario o contraseña incorrectos" });
+          return done(null, false, { message: "Invalid username or password" });
         }
 
-        console.log(`[Auth] Successful login for user: ${username}`);
         return done(null, user);
       } catch (err) {
-        console.error("[Auth] Login error:", err);
         return done(err);
       }
     })
@@ -109,15 +103,11 @@ export function setupAuth(app: Express) {
 
   app.post("/api/register", async (req, res, next) => {
     try {
-      console.log("[Auth] Registration attempt:", req.body);
-
       const result = insertUserSchema.safeParse(req.body);
       if (!result.success) {
-        const errors = result.error.errors.map((e) => e.message).join(", ");
-        console.log(`[Auth] Registration validation failed:`, errors);
         return res.status(400).json({
           success: false,
-          message: errors,
+          message: result.error.errors.map((e) => e.message).join(", "),
         });
       }
 
@@ -131,10 +121,9 @@ export function setupAuth(app: Express) {
         .limit(1);
 
       if (existingUser) {
-        console.log(`[Auth] Registration failed - username exists:`, username);
         return res.status(400).json({
           success: false,
-          message: "El nombre de usuario ya existe",
+          message: "Username already exists",
         });
       }
 
@@ -147,16 +136,13 @@ export function setupAuth(app: Express) {
         })
         .returning();
 
-      console.log(`[Auth] User registered successfully:`, username);
-
       req.login(newUser, (err) => {
         if (err) {
-          console.error("[Auth] Post-registration login error:", err);
           return next(err);
         }
         return res.json({
           success: true,
-          message: "Registro exitoso",
+          message: "Registration successful",
           user: {
             id: newUser.id,
             username: newUser.username,
@@ -164,7 +150,6 @@ export function setupAuth(app: Express) {
         });
       });
     } catch (error) {
-      console.error("[Auth] Registration error:", error);
       next(error);
     }
   });
@@ -174,26 +159,22 @@ export function setupAuth(app: Express) {
       "local",
       (err: Error | null, user: Express.User | false, info: IVerifyOptions) => {
         if (err) {
-          console.error("[Auth] Authentication error:", err);
           return next(err);
         }
         if (!user) {
-          console.log("[Auth] Authentication failed:", info.message);
           return res.status(401).json({
             success: false,
-            message: info.message || "Error de autenticación",
+            message: info.message || "Authentication error",
           });
         }
 
         req.login(user, (err) => {
           if (err) {
-            console.error("[Auth] Login error:", err);
             return next(err);
           }
-          console.log("[Auth] Login successful:", user.username);
           return res.json({
             success: true,
-            message: "Inicio de sesión exitoso",
+            message: "Login successful",
             user: {
               id: user.id,
               username: user.username,
@@ -205,21 +186,16 @@ export function setupAuth(app: Express) {
   });
 
   app.post("/api/logout", (req, res) => {
-    const username = req.user?.username;
-    console.log("[Auth] Logout attempt:", username);
-
     req.logout((err) => {
       if (err) {
-        console.error("[Auth] Logout error:", err);
         return res.status(500).json({
           success: false,
-          message: "Error al cerrar sesión",
+          message: "Error during logout",
         });
       }
-      console.log("[Auth] Logout successful:", username);
       res.json({
         success: true,
-        message: "Sesión cerrada exitosamente",
+        message: "Logout successful",
       });
     });
   });
@@ -234,7 +210,7 @@ export function setupAuth(app: Express) {
     }
     res.status(401).json({
       success: false,
-      message: "No autenticado",
+      message: "Not authenticated",
     });
   });
 }
