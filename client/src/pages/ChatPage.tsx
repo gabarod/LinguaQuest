@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Send } from "lucide-react";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { useUser } from "@/hooks/use-user";
+import { TextToSpeech } from "@/components/TextToSpeech";
 
 interface Message {
   id: string;
@@ -125,14 +126,22 @@ export default function ChatPage() {
                             {message.role === "user" ? "U" : "A"}
                           </AvatarFallback>
                         </Avatar>
-                        <div
-                          className={`rounded-lg p-3 max-w-[80%] ${
-                            message.role === "user"
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted"
-                          }`}
-                        >
-                          {message.content}
+                        <div className="flex items-start gap-2">
+                          <div
+                            className={`rounded-lg p-3 max-w-[80%] ${
+                              message.role === "user"
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted"
+                            }`}
+                          >
+                            {message.content}
+                          </div>
+                          {message.role === "assistant" && (
+                            <TextToSpeech 
+                              text={message.content}
+                              language={user?.targetLanguage || 'english'}
+                            />
+                          )}
                         </div>
                       </div>
                     ))}
