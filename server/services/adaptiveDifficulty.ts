@@ -1,6 +1,6 @@
 import { db } from "@db";
-import { performanceMetrics, difficultyPreferences, exercises, type Exercise } from "@db/schema";
-import { eq, and, avg, desc } from "drizzle-orm";
+import { performanceMetrics, difficultyPreferences, exercises } from "@db/schema";
+import { eq, and, avg, desc, sql } from "drizzle-orm";
 
 interface PerformanceAnalysis {
   averageAccuracy: number;
@@ -21,16 +21,15 @@ export class AdaptiveDifficultyService {
   static async analyzeUserPerformance(userId: number): Promise<PerformanceAnalysis> {
     const recentMetrics = await db
       .select({
-        accuracy: avg(performanceMetrics.accuracy),
-        responseTime: avg(performanceMetrics.responseTime),
-        attempts: avg(performanceMetrics.attemptCount),
+        accuracy: avg(performanceMetrics.accuracy).mapWith(Number),
+        responseTime: avg(performanceMetrics.responseTime).mapWith(Number),
+        attempts: avg(performanceMetrics.attemptCount).mapWith(Number),
       })
       .from(performanceMetrics)
       .where(
         and(
           eq(performanceMetrics.userId, userId),
-          // Consider only recent performance (last 7 days)
-          performanceMetrics.timestamp > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+          sql`${performanceMetrics.timestamp} > NOW() - INTERVAL '7 days'`
         )
       )
       .groupBy(performanceMetrics.userId);
@@ -49,7 +48,7 @@ export class AdaptiveDifficultyService {
     const skillMetrics = await db
       .select({
         skillType: exercises.skillType,
-        accuracy: avg(performanceMetrics.accuracy),
+        accuracy: avg(performanceMetrics.accuracy).mapWith(Number),
       })
       .from(performanceMetrics)
       .innerJoin(exercises, eq(exercises.id, performanceMetrics.exerciseId))
@@ -87,11 +86,12 @@ export class AdaptiveDifficultyService {
       this.ADJUSTMENT_THRESHOLD;
 
     // Adjust difficulty within bounds
+    const currentDifficulty = Number(exercise.difficulty);
     const newDifficulty = Math.max(
       this.DIFFICULTY_RANGE.min,
       Math.min(
         this.DIFFICULTY_RANGE.max,
-        parseFloat(exercise.difficulty) + difficultyDelta
+        currentDifficulty + difficultyDelta
       )
     );
 

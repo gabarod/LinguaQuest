@@ -1,7 +1,7 @@
 import { db } from "@db";
 import { type User } from "@db/schema";
 import { userStats, difficultyPreferences } from "@db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 interface ChatMessage {
   role: "system" | "user" | "assistant";
@@ -10,7 +10,7 @@ interface ChatMessage {
 
 export class ChatService {
   private static readonly SUPPORTED_LANGUAGES = ["Spanish", "French", "German", "Italian"];
-  
+
   static async generateResponse(userId: number, message: string, targetLanguage: string) {
     try {
       // Get user's skill level and preferences
@@ -20,7 +20,7 @@ export class ChatService {
         .where(eq(difficultyPreferences.userId, userId));
 
       const skillLevel = preferences?.preferredLevel || "beginner";
-      
+
       // Create conversation context
       const messages: ChatMessage[] = [
         {
@@ -70,13 +70,13 @@ export class ChatService {
   }
 
   static async updateUserProgress(userId: number, messageCount: number) {
-    // Update user stats to reflect chat practice
+    // Update user stats to reflect chat practice using SQL expressions
     await db
       .update(userStats)
       .set({
-        weeklyXP: userStats.weeklyXP + 5,
-        monthlyXP: userStats.monthlyXP + 5,
-        totalPoints: userStats.totalPoints + 5
+        weeklyXP: sql`${userStats.weeklyXP} + 5`,
+        monthlyXP: sql`${userStats.monthlyXP} + 5`,
+        totalPoints: sql`${userStats.totalPoints} + 5`
       })
       .where(eq(userStats.userId, userId));
   }
