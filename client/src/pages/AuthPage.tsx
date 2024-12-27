@@ -12,6 +12,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useLocation } from "wouter";
 import { SiGoogle, SiFacebook } from "react-icons/si";
+import { Eye, EyeOff } from "lucide-react";
 
 const loginSchema = z.object({
   username: z.string().min(1, "Username or email is required"),
@@ -39,6 +40,8 @@ export default function AuthPage() {
   const [, setLocation] = useLocation();
   const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [showRegisterPassword, setShowRegisterPassword] = useState(false);
 
   const loginForm = useForm({
     resolver: zodResolver(loginSchema),
@@ -154,12 +157,21 @@ export default function AuthPage() {
                           <p className="text-sm text-red-500">{loginForm.formState.errors.username.message}</p>
                         )}
                       </div>
-                      <div className="space-y-2">
+                      <div className="space-y-2 relative">
                         <Input
-                          type="password"
+                          type={showLoginPassword ? "text" : "password"}
                           placeholder="Password"
                           {...loginForm.register("password")}
                         />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute right-2 top-0.5"
+                          onClick={() => setShowLoginPassword(!showLoginPassword)}
+                        >
+                          {showLoginPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </Button>
                         {loginForm.formState.errors.password && (
                           <p className="text-sm text-red-500">{loginForm.formState.errors.password.message}</p>
                         )}
@@ -269,12 +281,21 @@ export default function AuthPage() {
                       <p className="text-sm text-red-500">{registerForm.formState.errors.email.message}</p>
                     )}
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-2 relative">
                     <Input
-                      type="password"
+                      type={showRegisterPassword ? "text" : "password"}
                       placeholder="Password"
                       {...registerForm.register("password")}
                     />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-2 top-0.5"
+                      onClick={() => setShowRegisterPassword(!showRegisterPassword)}
+                    >
+                      {showRegisterPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
                     {registerForm.formState.errors.password && (
                       <p className="text-sm text-red-500">{registerForm.formState.errors.password.message}</p>
                     )}
