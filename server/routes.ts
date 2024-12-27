@@ -6,6 +6,7 @@ import { sql } from "drizzle-orm";
 import { lessons, exercises, userProgress, userStats, milestones, userMilestones, dailyChallenges, userChallengeAttempts, users } from "@db/schema";
 import { eq, and, gte, lte } from "drizzle-orm";
 import { format, subDays } from "date-fns";
+import { ChatService } from "./services/chatService";
 
 export function registerRoutes(app: Express): Server {
   setupAuth(app);
@@ -526,6 +527,36 @@ export function registerRoutes(app: Express): Server {
     } catch (error) {
       console.error("Error fetching user ranking stats:", error);
       res.status(500).send("Failed to fetch user stats");
+    }
+  });
+
+  // Chat endpoint for language practice
+  app.post("/api/chat", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    const { message, targetLanguage } = req.body;
+
+    if (!message || !targetLanguage) {
+      return res.status(400).send("Message and target language are required");
+    }
+
+    if (!ChatService.isSupportedLanguage(targetLanguage)) {
+      return res.status(400).send("Unsupported language");
+    }
+
+    try {
+      const response = await ChatService.generateResponse(userId, message, targetLanguage);
+
+      // Update user progress for using the chat feature
+      await ChatService.updateUserProgress(userId, 1);
+
+      res.json({ response });
+    } catch (error) {
+      console.error("Chat error:", error);
+      res.status(500).send("Failed to generate chat response");
     }
   });
 
