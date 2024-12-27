@@ -10,12 +10,29 @@ import {
 import { relations } from "drizzle-orm";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 
+// Supported languages
+export const supportedLanguages = [
+  'english',
+  'spanish',
+  'french',
+  'german',
+  'italian',
+  'portuguese',
+  'chinese',
+  'japanese',
+  'korean'
+] as const;
+
+export type SupportedLanguage = typeof supportedLanguages[number];
+
 // Base tables first
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").unique().notNull(),
   email: text("email").unique(),
   password: text("password").notNull(),
+  nativeLanguage: text("native_language").notNull(),
+  targetLanguage: text("target_language").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -112,6 +129,8 @@ export const insertUserSchema = createInsertSchema(users, {
     .regex(/[a-z]/, "Password must contain at least one lowercase letter")
     .regex(/[0-9]/, "Password must contain at least one number"),
   email: z.string().email("Invalid email address").optional(),
+  nativeLanguage: z.enum(supportedLanguages),
+  targetLanguage: z.enum(supportedLanguages),
 });
 
 export const selectUserSchema = createSelectSchema(users);

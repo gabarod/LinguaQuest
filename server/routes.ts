@@ -3,10 +3,11 @@ import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { db } from "@db";
 import { sql } from "drizzle-orm";
-import { lessons, exercises, userProgress, userStats, users } from "@db/schema";
-import { eq, and, desc } from "drizzle-orm";
+import { lessons, exercises, userProgress, userStats, users, dailyChallenges } from "@db/schema";
+import { eq, and, desc, gte } from "drizzle-orm";
 import learningPathRouter from "./routes/learningPath";
 import { logger } from './services/loggingService';
+import { subDays, startOfDay, format } from 'date-fns';
 
 export function registerRoutes(app: Express): Server {
   // Create HTTP server
@@ -35,7 +36,7 @@ export function registerRoutes(app: Express): Server {
 
       res.json(allLessons);
     } catch (error) {
-      console.error("Error fetching lessons:", error);
+      logger.error("Error fetching lessons:", error);
       res.status(500).send("Failed to fetch lessons");
     }
   });
@@ -58,7 +59,7 @@ export function registerRoutes(app: Express): Server {
 
       res.json(lesson);
     } catch (error) {
-      console.error("Error fetching lesson:", error);
+      logger.error("Error fetching lesson:", error);
       res.status(500).send("Failed to fetch lesson");
     }
   });
@@ -117,7 +118,7 @@ export function registerRoutes(app: Express): Server {
 
       res.json({ success: true });
     } catch (error) {
-      console.error("Error completing lesson:", error);
+      logger.error("Error completing lesson:", error);
       res.status(500).send("Failed to complete lesson");
     }
   });
@@ -141,8 +142,133 @@ export function registerRoutes(app: Express): Server {
         lastActivity: new Date(),
       });
     } catch (error) {
-      console.error("Error fetching progress:", error);
+      logger.error("Error fetching progress:", error);
       res.status(500).send("Failed to fetch progress");
+    }
+  });
+
+  // Get detailed progress for dashboard
+  app.get("/api/progress/detailed", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    try {
+      // Get weekly progress for the last 7 days
+      const today = startOfDay(new Date());
+      const weekAgo = subDays(today, 6);
+
+      const weeklyProgress = await db
+        .select({
+          day: sql<string>`date_trunc('day', ${userProgress.completedAt})::text`,
+          points: sql<number>`sum(${lessons.points})`,
+          exercises: sql<number>`count(*)`,
+        })
+        .from(userProgress)
+        .innerJoin(lessons, eq(lessons.id, userProgress.lessonId))
+        .where(and(
+          eq(userProgress.userId, userId),
+          gte(userProgress.completedAt, weekAgo)
+        ))
+        .groupBy(sql`date_trunc('day', ${userProgress.completedAt})`)
+        .orderBy(sql`date_trunc('day', ${userProgress.completedAt})`);
+
+      // Get skill distribution
+      const skillDistribution = await db
+        .select({
+          skill: lessons.type,
+          value: sql<number>`count(*)`,
+        })
+        .from(userProgress)
+        .innerJoin(lessons, eq(lessons.id, userProgress.lessonId))
+        .where(eq(userProgress.userId, userId))
+        .groupBy(lessons.type);
+
+      // Get user stats
+      const stats = await db.query.userStats.findFirst({
+        where: eq(userStats.userId, userId),
+      });
+
+      res.json({
+        weeklyProgress: weeklyProgress.map(wp => ({
+          day: format(new Date(wp.day), 'EEE'),
+          points: wp.points,
+          exercises: wp.exercises,
+        })),
+        skillDistribution,
+        totalPoints: stats?.totalPoints || 0,
+        lessonsCompleted: stats?.lessonsCompleted || 0,
+        streak: stats?.streak || 0,
+      });
+    } catch (error) {
+      logger.error("Error fetching detailed progress:", error);
+      res.status(500).send("Failed to fetch detailed progress");
+    }
+  });
+
+  // Get user stats for habit tracking
+  app.get("/api/leaderboard/user/stats", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    try {
+      const stats = await db.query.userStats.findFirst({
+        where: eq(userStats.userId, userId),
+      });
+
+      res.json({
+        streak: stats?.streak || 0,
+        weeklyXP: stats?.weeklyXP || 0,
+        monthlyXP: stats?.monthlyXP || 0,
+        completedChallenges: stats?.lessonsCompleted || 0,
+        lastActivity: stats?.lastActivity || new Date(),
+      });
+    } catch (error) {
+      logger.error("Error fetching user stats:", error);
+      res.status(500).send("Failed to fetch user stats");
+    }
+  });
+
+  // Get daily challenge
+  app.get("/api/daily-challenge", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    try {
+      const today = startOfDay(new Date());
+      const [dailyChallenge] = await db
+        .select()
+        .from(dailyChallenges)
+        .where(and(
+          eq(dailyChallenges.userId, userId),
+          gte(dailyChallenges.createdAt, today)
+        ))
+        .limit(1);
+
+      if (!dailyChallenge) {
+        // Create a new daily challenge if none exists
+        const [newChallenge] = await db
+          .insert(dailyChallenges)
+          .values({
+            userId,
+            type: 'practice',
+            description: 'Complete 3 lessons today',
+            points: 100,
+          })
+          .returning();
+
+        return res.json(newChallenge);
+      }
+
+      res.json(dailyChallenge);
+    } catch (error) {
+      logger.error("Error fetching daily challenge:", error);
+      res.status(500).send("Failed to fetch daily challenge");
     }
   });
 
