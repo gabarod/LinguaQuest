@@ -7,6 +7,7 @@ import { useUser } from "@/hooks/use-user";
 import AuthPage from "./pages/AuthPage";
 import HomePage from "./pages/HomePage";
 import LessonPage from "./pages/LessonPage";
+import GamesPage from "./pages/GamesPage";
 import { OnboardingTutorial } from "./components/OnboardingTutorial";
 
 function App() {
@@ -29,6 +30,7 @@ function App() {
       <Route path="/onboarding" component={OnboardingTutorial} />
       <Route path="/" component={HomePage} />
       <Route path="/lesson/:id" component={LessonPage} />
+      <Route path="/games" component={GamesPage} />
     </Switch>
   );
 }
