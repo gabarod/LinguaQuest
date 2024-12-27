@@ -4,7 +4,7 @@ import { setupAuth } from "./auth";
 import { db } from "@db";
 import { sql } from "drizzle-orm";
 import { lessons, exercises, userProgress, userStats, milestones, userMilestones, dailyChallenges, userChallengeAttempts, users, flashcards, flashcardProgress, difficultyPreferences, languages, userLanguages } from "@db/schema";
-import { eq, and, gte, lte, desc } from "drizzle-orm";
+import { eq, and, gte, lte, desc, or } from "drizzle-orm";
 import { format, subDays } from "date-fns";
 import { ChatService } from "./services/chatService";
 import { BuddyService } from "./services/buddyService";
@@ -985,7 +985,7 @@ export function registerRoutes(app: Express): Server {
           averageScore: sql<number>`avg(${userChallengeAttempts.score})`,
         })
         .from(userStats)
-        .innerJoin(users, eq(users.id, userStats.userId))
+                .innerJoin(users, eq(users.id, userStats.userId))
         .leftJoin(
           userChallengeAttempts,
           and(
@@ -1148,6 +1148,7 @@ export function registerRoutes(app: Express): Server {
           examples: card.examples,
           language,
           difficulty: 1.0,
+          createdAt: new Date(),
           lastReviewed: new Date(),
           nextReview: new Date(Date.now() + 24 * 60 * 60 * 1000), // Review in 24 hours
         })
@@ -1162,12 +1163,45 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Get user's flashcards
+  // Flashcard Routes
+  app.post("/api/flashcards", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    const { term, definition, context, examples, language, tags } = req.body;
+
+    try {
+      const [flashcard] = await db
+        .insert(flashcards)
+        .values({
+          userId,
+          term,
+          definition,
+          context,
+          examples,
+          language,
+          tags,
+          difficulty: 1.0,
+          createdAt: new Date(),
+        })
+        .returning();
+
+      res.json(flashcard);
+    } catch (error) {
+      console.error("Error creating flashcard:", error);
+      res.status(500).send("Failed to create flashcard");
+    }
+  });
+
   app.get("/api/flashcards", async (req, res) => {
     const userId = req.user?.id;
     if (!userId) {
       return res.status(401).send("Not authenticated");
     }
+
+    const { language } = req.query;
 
     try {
       const userFlashcards = await db
@@ -1183,90 +1217,227 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Update flashcard progress
-  app.post("/api/flashcards/:id/progress", async (req, res) => {
-    const userId = req.user?.id;
-    if (!userId) {
-      return res.status(401).send("Not authenticated");
-    }
-
-    const { correct, responseTime } = req.body;
-    const flashcardId = parseInt(req.params.id);
-
-    try {
-      // Record progress
-      await db.insert(flashcardProgress).values({
-        userId,
-        flashcardId,
-        correct,
-        responseTime,
-      });
-
-      // Update flashcard difficulty and next review time based on performance
-      const [flashcard] = await db
-        .select()
-        .from(flashcards)
-        .where(
-          and(
-            eq(flashcards.id, flashcardId),
-            eq(flashcards.userId, userId)
-          )
-        );
-
-      if (flashcard) {
-        const newDifficulty = correct
-          ? Math.max(0.5, flashcard.difficulty - 0.1)
-          : Math.min(2.0, flashcard.difficulty + 0.2);
-
-        const nextReviewDelay = Math.round(
-          (correct ? 2 : 0.5) * // Base multiplier
-          (24 * 60 * 60 * 1000) * // One day in milliseconds
-          Math.pow(2, flashcard.proficiency || 0) * // Exponential spacing
-          newDifficulty // Adjusted by difficulty
-        );
-
-        await db
-          .update(flashcards)
-          .set({
-            difficulty: newDifficulty,
-            lastReviewed: new Date(),
-            nextReview: new Date(Date.now() + nextReviewDelay),
-            proficiency: sql`${flashcards.proficiency} + ${correct ? 1 : -1}`,
-          })
-          .where(eq(flashcards.id, flashcardId));
-      }
-
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error updating flashcard progress:", error);
-      res.status(500).send("Failed to update flashcard progress");
-    }
-  });
-
-  // Get due flashcards for review
   app.get("/api/flashcards/review", async (req, res) => {
     const userId = req.user?.id;
     if (!userId) {
       return res.status(401).send("Not authenticated");
     }
 
+    const { language } = req.query;
+
     try {
+      // Obtener flashcards que necesitan revisión
       const dueFlashcards = await db
         .select()
         .from(flashcards)
         .where(
           and(
             eq(flashcards.userId, userId),
-            lte(flashcards.nextReview, new Date())
+            or(
+              sql`${flashcards.nextReview} IS NULL`,
+              sql`${flashcards.nextReview} <= NOW()`
+            )
           )
         )
-        .orderBy(desc(flashcards.nextReview))
-        .limit(20);
+        .orderBy(flashcards.lastReviewed)
+        .limit(10);
 
       res.json(dueFlashcards);
     } catch (error) {
-      console.error("Error fetching due flashcards:", error);
-      res.status(500).send("Failed to fetch due flashcards");
+      console.error("Error fetching flashcards for review:", error);
+      res.status(500).send("Failed to fetch flashcards for review");
+    }
+  });
+
+  app.post("/api/flashcards/:id/review", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    const flashcardId = parseInt(req.params.id);
+    const { correct, responseTime } = req.body;
+
+    try {
+      await db.transaction(async (tx) => {
+        // Registrar el progreso de la revisión
+        await tx.insert(flashcardProgress).values({
+          userId,
+          flashcardId,
+          correct,
+          responseTime,
+          reviewedAt: new Date(),
+        });
+
+        // Actualizar la flashcard
+        const [flashcard] = await tx
+          .select()
+          .from(flashcards)
+          .where(
+            and(
+              eq(flashcards.id, flashcardId),
+              eq(flashcards.userId, userId)
+            )
+          );
+
+        if (!flashcard) {
+          throw new Error("Flashcard not found");
+        }
+
+        // Calcular nuevo intervalo de revisión basado en el algoritmo SM-2
+        const newProficiency = correct
+          ? Math.min(flashcard.proficiency + 1, 5)
+          : Math.max(flashcard.proficiency - 1, 0);
+
+        const intervalDays = Math.pow(2, newProficiency);
+        const nextReview = new Date();
+        nextReview.setDate(nextReview.getDate() + intervalDays);
+
+        // Actualizar la flashcard con los nuevos valores
+        await tx
+          .update(flashcards)
+          .set({
+            proficiency: newProficiency,
+            lastReviewed: new Date(),
+            nextReview,
+            difficulty: correct
+              ? Math.max(flashcard.difficulty - 0.1, 1.0)
+              : Math.min(flashcard.difficulty + 0.1, 5.0),
+          })
+          .where(eq(flashcards.id, flashcardId));
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error updating flashcard review:", error);
+      res.status(500).send("Failed to update flashcard review");
+    }
+  });
+
+  // Get weekly challenge leaderboard
+  app.get("/api/leaderboard/weekly-challenge", async (req, res) => {
+    try {
+      const startOfWeek = new Date();
+      startOfWeek.setHours(0, 0, 0, 0);
+      startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+
+      const leaderboard = await db
+        .select({
+          id: users.id,
+          username: users.username,
+          weeklyXP: userStats.weeklyXP,
+          weeklyRank: sql<number>`rank() over (order by ${userStats.weeklyXP} desc)`,
+          challengesCompleted: sql<number>`count(distinct ${userChallengeAttempts.challengeId})`,
+          averageScore: sql<number>`avg(${userChallengeAttempts.score})`,
+        })
+        .from(userStats)
+        .innerJoin(users, eq(users.id, userStats.userId))
+        .leftJoin(
+          userChallengeAttempts,
+          and(
+            eq(userChallengeAttempts.userId, users.id),
+            gte(userChallengeAttempts.completedAt, startOfWeek)
+          )
+        )
+        .groupBy(users.id, users.username, userStats.weeklyXP)
+        .orderBy(desc(userStats.weeklyXP))
+        .limit(100);
+
+      res.json(leaderboard);
+    } catch (error) {
+      console.error("Error fetching weekly challenge leaderboard:", error);
+      res.status(500).send("Failed to fetch weekly challenge leaderboard");
+    }
+  });
+
+  // Reset weekly XP at the start of each week
+  app.post("/api/leaderboard/weekly-reset", async (req, res) => {
+    try {
+      await db
+        .update(userStats)
+        .set({
+          weeklyXP: 0,
+          lastWeeklyReset: new Date(),
+        });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error resetting weekly XP:", error);
+      res.status(500).send("Failed to reset weekly XP");
+    }
+  });
+
+  // Get conversation starters
+  app.get("/api/chat/starters", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    const { language } = req.query;
+    if (!language || typeof language !== "string") {
+      return res.status(400).send("Language parameter is required");
+    }
+
+    if (!ChatService.isSupportedLanguage(language)) {
+      return res.status(400).send("Unsupported language");
+    }
+
+    try {
+      // Get user's skill level
+      const [preferences] = await db
+        .select()
+        .from(difficultyPreferences)
+        .where(eq(difficultyPreferences.userId, userId));
+
+      const skillLevel = preferences?.preferredLevel || "beginner";
+
+      const starters = await ChatService.generateConversationStarters(language, skillLevel);
+      res.json(starters);
+    } catch (error) {
+      console.error("Error generating conversation starters:", error);
+      res.status(500).send("Failed to generate conversation starters");
+    }
+  });
+
+  app.get("/api/user/preferences", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    try {
+      const [preferences] = await db
+        .select()
+        .from(difficultyPreferences)
+        .where(eq(difficultyPreferences.userId, userId));
+
+      if (!preferences) {
+        // Create default preferences if none exist
+        const defaultPreferences = {
+          userId,
+          preferredLevel: "beginner",
+          adaptiveMode: true,
+          skillLevels: {
+            vocabulary: 1,
+            grammar: 1,
+            pronunciation: 1,
+            comprehension: 1
+          }
+        };
+
+        const [newPreferences] = await db
+          .insert(difficultyPreferences)
+          .values(defaultPreferences)
+          .returning();
+
+        return res.json(newPreferences);
+      }
+
+      res.json(preferences);
+    } catch (error) {
+      console.error("Error fetching user preferences:", error);
+      res.status(500).send("Failed to fetch user preferences");
     }
   });
 
