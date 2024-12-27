@@ -945,6 +945,47 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  app.get("/api/user/preferences", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    try {
+      const [preferences] = await db
+        .select()
+        .from(difficultyPreferences)
+        .where(eq(difficultyPreferences.userId, userId));
+
+      if (!preferences) {
+        // Create default preferences if none exist
+        const defaultPreferences = {
+          userId,
+          preferredLevel: "beginner",
+          adaptiveMode: true,
+          skillLevels: {
+            vocabulary: 1,
+            grammar: 1,
+            pronunciation: 1,
+            comprehension: 1
+          }
+        };
+
+        const [newPreferences] = await db
+          .insert(difficultyPreferences)
+          .values(defaultPreferences)
+          .returning();
+
+        return res.json(newPreferences);
+      }
+
+      res.json(preferences);
+    } catch (error) {
+      console.error("Error fetching user preferences:", error);
+      res.status(500).send("Failed to fetch user preferences");
+    }
+  });
+
   // Add these routes after the existing authentication routes
   // Generate flashcards
   app.post("/api/flashcards/generate", async (req, res) => {

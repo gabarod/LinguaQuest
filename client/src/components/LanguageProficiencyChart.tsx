@@ -10,6 +10,7 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
+import type { SelectDifficultyPreferences } from "@db/schema";
 
 interface SkillLevel {
   name: string;
@@ -18,7 +19,7 @@ interface SkillLevel {
 }
 
 export function LanguageProficiencyChart() {
-  const { data: preferences, isLoading } = useQuery({
+  const { data: preferences, isLoading } = useQuery<SelectDifficultyPreferences>({
     queryKey: ["/api/user/preferences"],
   });
 
@@ -33,12 +34,26 @@ export function LanguageProficiencyChart() {
   }
 
   const skillLevels: SkillLevel[] = [
-    { name: "Vocabulary", value: preferences?.skillLevels?.vocabulary ?? 0, fullMark: 5 },
-    { name: "Grammar", value: preferences?.skillLevels?.grammar ?? 0, fullMark: 5 },
-    { name: "Pronunciation", value: preferences?.skillLevels?.pronunciation ?? 0, fullMark: 5 },
-    { name: "Listening", value: preferences?.skillLevels?.listening ?? 0, fullMark: 5 },
-    { name: "Speaking", value: preferences?.skillLevels?.speaking ?? 0, fullMark: 5 },
-    { name: "Writing", value: preferences?.skillLevels?.writing ?? 0, fullMark: 5 },
+    { 
+      name: "Vocabulary", 
+      value: preferences?.skillLevels?.vocabulary ?? 0, 
+      fullMark: 5 
+    },
+    { 
+      name: "Grammar", 
+      value: preferences?.skillLevels?.grammar ?? 0, 
+      fullMark: 5 
+    },
+    { 
+      name: "Pronunciation", 
+      value: preferences?.skillLevels?.pronunciation ?? 0, 
+      fullMark: 5 
+    },
+    { 
+      name: "Comprehension", 
+      value: preferences?.skillLevels?.comprehension ?? 0, 
+      fullMark: 5 
+    }
   ];
 
   return (
