@@ -106,12 +106,20 @@ export function registerRoutes(app: Express): Server {
     }
 
     try {
-      // For now, return initial greeting message
+      const user = await db.query.users.findFirst({
+        where: eq(users.id, userId),
+      });
+
+      if (!user) {
+        return res.status(404).send("User not found");
+      }
+
+      // Return initial greeting message in the target language
       const messages: ChatMessage[] = [
         {
           id: "1",
           role: "assistant",
-          content: "¡Hola! Soy tu asistente de aprendizaje de idiomas. ¿Cómo puedo ayudarte a practicar hoy?",
+          content: `¡Hola! Soy tu profesor de ${user.targetLanguage}. Estoy aquí para ayudarte a practicar y mejorar tus habilidades. ¿Qué te gustaría practicar hoy? Podemos trabajar en gramática, vocabulario, o tener una conversación práctica.`,
           timestamp: new Date(),
         },
       ];
@@ -143,7 +151,7 @@ export function registerRoutes(app: Express): Server {
         return res.status(404).send("User not found");
       }
 
-      // Call Perplexity API
+      // Call Perplexity API with enhanced language learning prompt
       const response = await fetch("https://api.perplexity.ai/chat/completions", {
         method: "POST",
         headers: {
@@ -155,10 +163,16 @@ export function registerRoutes(app: Express): Server {
           messages: [
             {
               role: "system",
-              content: `You are a helpful language learning assistant for ${user.targetLanguage}. 
-                       Provide brief, natural responses that help the user practice the language. 
-                       If the user writes in their native language, respond in the target language 
-                       and provide corrections when appropriate.`
+              content: `You are an experienced ${user.targetLanguage} language teacher. Your role is to:
+                       1. Always respond in ${user.targetLanguage} unless the user specifically asks for clarification
+                       2. Correct any grammatical or vocabulary errors in the user's messages, explaining the corrections
+                       3. Maintain an educational conversation by asking follow-up questions
+                       4. Introduce new vocabulary and expressions naturally in context
+                       5. Focus on practical, everyday language use
+                       6. Encourage the user to express themselves more fully
+                       7. Provide positive reinforcement while maintaining high standards
+                       8. If the user makes mistakes, provide corrections in a supportive way
+                       Remember to keep responses concise and clear, suitable for language learners.`
             },
             {
               role: "user",
@@ -166,7 +180,7 @@ export function registerRoutes(app: Express): Server {
             }
           ],
           temperature: 0.7,
-          max_tokens: 150,
+          max_tokens: 200,
         }),
       });
 
