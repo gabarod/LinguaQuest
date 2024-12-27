@@ -19,6 +19,7 @@ export function Navigation() {
     setLocation("/");
   };
 
+  // Safely get user initial, default to '?' if username is undefined
   const userInitial = user?.username ? user.username.charAt(0).toUpperCase() : '?';
 
   return (

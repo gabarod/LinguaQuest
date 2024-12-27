@@ -1,6 +1,11 @@
 import { QueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 
+// Ensure global is defined for Node.js modules
+if (typeof global === 'undefined') {
+  (window as any).global = window;
+}
+
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
