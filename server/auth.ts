@@ -72,6 +72,8 @@ export function setupAuth(app: Express) {
   passport.use(
     new LocalStrategy(async (username, password, done) => {
       try {
+        console.log(`[Auth] Login attempt for username: ${username}`);
+
         const [user] = await db
           .select()
           .from(users)
@@ -79,21 +81,25 @@ export function setupAuth(app: Express) {
           .limit(1);
 
         if (!user) {
-          return done(null, false, { message: "Invalid username or password" });
+          console.log(`[Auth] User not found: ${username}`);
+          return done(null, false, { message: "Usuario o contraseña incorrectos" });
         }
 
         if (!user.password) {
-          return done(null, false, { message: "Please login with social provider" });
+          console.log(`[Auth] Password not set for user: ${username}`);
+          return done(null, false, { message: "Por favor inicia sesión con un proveedor social" });
         }
 
         const isMatch = await crypto.compare(password, user.password);
         if (!isMatch) {
-          return done(null, false, { message: "Invalid username or password" });
+          console.log(`[Auth] Invalid password for user: ${username}`);
+          return done(null, false, { message: "Usuario o contraseña incorrectos" });
         }
 
+        console.log(`[Auth] Successful login for user: ${username}`);
         return done(null, user);
       } catch (err) {
-        console.error("Login error:", err);
+        console.error("[Auth] Login error:", err);
         return done(err);
       }
     })
@@ -112,28 +118,33 @@ export function setupAuth(app: Express) {
         .limit(1);
 
       if (!user) {
+        console.log(`[Auth] Failed to deserialize user: ${id}`);
         return done(null, false);
       }
 
       done(null, user);
     } catch (err) {
+      console.error("[Auth] Deserialize error:", err);
       done(err);
     }
   });
 
   app.post("/api/register", async (req, res, next) => {
     try {
+      console.log("[Auth] Registration attempt:", req.body.username);
+
       const result = insertUserSchema.safeParse(req.body);
       if (!result.success) {
-        return res
-          .status(400)
-          .send(result.error.errors.map((e) => e.message).join(", "));
+        const errors = result.error.errors.map((e) => e.message).join(", ");
+        console.log(`[Auth] Registration validation failed:`, errors);
+        return res.status(400).json({ 
+          success: false,
+          message: "Error de validación",
+          errors: errors
+        });
       }
 
       const { username, email, password } = result.data;
-      if (!password) {
-        return res.status(400).send("Password is required");
-      }
 
       // Check if username or email already exists
       const [existingUser] = await db
@@ -143,10 +154,15 @@ export function setupAuth(app: Express) {
         .limit(1);
 
       if (existingUser) {
-        if (existingUser.username === username) {
-          return res.status(400).send("Username already exists");
-        }
-        return res.status(400).send("Email already exists");
+        const message = existingUser.username === username
+          ? "El nombre de usuario ya existe"
+          : "El correo electrónico ya está registrado";
+
+        console.log(`[Auth] Registration failed - existing user:`, message);
+        return res.status(400).json({
+          success: false,
+          message: message
+        });
       }
 
       // Hash password and create user
@@ -160,6 +176,8 @@ export function setupAuth(app: Express) {
         })
         .returning();
 
+      console.log(`[Auth] User registered successfully:`, username);
+
       // Send verification email
       const verificationToken = jwt.sign(
         { userId: newUser.id },
@@ -169,41 +187,64 @@ export function setupAuth(app: Express) {
 
       await transporter.sendMail({
         to: email,
-        subject: "Verify your email",
-        html: `Click <a href="${req.protocol}://${req.get("host")}/api/verify-email?token=${verificationToken}">here</a> to verify your email.`,
+        subject: "Verifica tu correo electrónico",
+        html: `Haz clic <a href="${req.protocol}://${req.get("host")}/api/verify-email?token=${verificationToken}">aquí</a> para verificar tu correo electrónico.`,
       });
 
       req.login(newUser, (err) => {
         if (err) {
+          console.error("[Auth] Post-registration login error:", err);
           return next(err);
         }
-        return res.json({ message: "Registration successful" });
+        return res.json({ 
+          success: true,
+          message: "Registro exitoso",
+          user: {
+            id: newUser.id,
+            username: newUser.username,
+            email: newUser.email
+          }
+        });
       });
     } catch (error) {
-      console.error("Registration error:", error);
+      console.error("[Auth] Registration error:", error);
       next(error);
     }
   });
 
   app.post("/api/login", (req, res, next) => {
+    console.log("[Auth] Login attempt:", req.body.username);
+
     passport.authenticate(
       "local",
       async (err: Error | null, user: Express.User | false, info: IVerifyOptions) => {
         if (err) {
-          console.error("Authentication error:", err);
+          console.error("[Auth] Authentication error:", err);
           return next(err);
         }
         if (!user) {
-          return res.status(401).send(info.message || "Authentication failed");
+          console.log("[Auth] Authentication failed:", info.message);
+          return res.status(401).json({
+            success: false,
+            message: info.message || "Error de autenticación"
+          });
         }
-
 
         req.login(user, (err) => {
           if (err) {
-            console.error("Login error:", err);
+            console.error("[Auth] Login error:", err);
             return next(err);
           }
-          return res.json({ message: "Login successful" });
+          console.log("[Auth] Login successful:", user.username);
+          return res.json({ 
+            success: true,
+            message: "Inicio de sesión exitoso",
+            user: {
+              id: user.id,
+              username: user.username,
+              email: user.email
+            }
+          });
         });
       }
     )(req, res, next);
@@ -213,7 +254,7 @@ export function setupAuth(app: Express) {
   app.post("/api/forgot-password", async (req, res) => {
     const { email } = req.body;
     if (!email) {
-      return res.status(400).send("Email is required");
+      return res.status(400).send("El correo electrónico es obligatorio");
     }
 
     try {
@@ -224,7 +265,7 @@ export function setupAuth(app: Express) {
         .limit(1);
 
       if (!user) {
-        return res.status(404).send("User not found");
+        return res.status(404).send("Usuario no encontrado");
       }
 
       const resetToken = jwt.sign(
@@ -243,14 +284,14 @@ export function setupAuth(app: Express) {
 
       await transporter.sendMail({
         to: email,
-        subject: "Password Reset Request",
-        html: `Click <a href="${req.protocol}://${req.get("host")}/reset-password?token=${resetToken}">here</a> to reset your password.`,
+        subject: "Solicitud de restablecimiento de contraseña",
+        html: `Haz clic <a href="${req.protocol}://${req.get("host")}/reset-password?token=${resetToken}">aquí</a> para restablecer tu contraseña.`,
       });
 
-      res.json({ message: "Password reset email sent" });
+      res.json({ message: "Correo electrónico de restablecimiento de contraseña enviado" });
     } catch (error) {
       console.error("Password reset request error:", error);
-      res.status(500).send("Error sending password reset email");
+      res.status(500).send("Error al enviar el correo electrónico de restablecimiento de contraseña");
     }
   });
 
@@ -259,7 +300,7 @@ export function setupAuth(app: Express) {
     const { token, password } = req.body;
 
     if (!token || !password) {
-      return res.status(400).send("Token and password are required");
+      return res.status(400).send("El token y la contraseña son obligatorios");
     }
 
     try {
@@ -275,7 +316,7 @@ export function setupAuth(app: Express) {
         .limit(1);
 
       if (!user) {
-        return res.status(400).send("Invalid or expired reset token");
+        return res.status(400).send("Token de restablecimiento inválido o expirado");
       }
 
       const hashedPassword = await crypto.hash(password);
@@ -289,10 +330,10 @@ export function setupAuth(app: Express) {
         })
         .where(eq(users.id, user.id));
 
-      res.json({ message: "Password has been reset" });
+      res.json({ message: "Contraseña restablecida" });
     } catch (error) {
       console.error("Password reset error:", error);
-      res.status(500).send("Error resetting password");
+      res.status(500).send("Error al restablecer la contraseña");
     }
   });
 
@@ -301,7 +342,7 @@ export function setupAuth(app: Express) {
     const { token } = req.query;
 
     if (!token || typeof token !== "string") {
-      return res.status(400).send("Invalid verification token");
+      return res.status(400).send("Token de verificación inválido");
     }
 
     try {
@@ -315,25 +356,47 @@ export function setupAuth(app: Express) {
       res.redirect("/login?verified=true");
     } catch (error) {
       console.error("Email verification error:", error);
-      res.status(400).send("Invalid or expired verification token");
+      res.status(400).send("Token de verificación inválido o expirado");
     }
   });
 
   // Logout
   app.post("/api/logout", (req, res) => {
+    const username = req.user?.username;
+    console.log("[Auth] Logout attempt:", username);
+
     req.logout((err) => {
       if (err) {
-        return res.status(500).send("Logout failed");
+        console.error("[Auth] Logout error:", err);
+        return res.status(500).json({
+          success: false,
+          message: "Error al cerrar sesión"
+        });
       }
-      res.json({ message: "Logout successful" });
+      console.log("[Auth] Logout successful:", username);
+      res.json({ 
+        success: true,
+        message: "Sesión cerrada exitosamente" 
+      });
     });
   });
 
   // Get current user
   app.get("/api/user", (req, res) => {
     if (req.isAuthenticated()) {
-      return res.json(req.user);
+      const user = req.user as Express.User;
+      return res.json({
+        success: true,
+        user: {
+          id: user.id,
+          username: user.username,
+          email: user.email
+        }
+      });
     }
-    res.status(401).send("Not authenticated");
+    res.status(401).json({
+      success: false,
+      message: "No autenticado"
+    });
   });
 }

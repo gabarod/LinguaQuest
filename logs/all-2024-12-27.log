@@ -2847,3 +2847,18 @@
 2024-12-27 12:31:44:3144 [35mhttp[39m: [35mPOST /api/login 500 in 118ms :: {"message":"column \"google_id\" does not exist…[39m
 2024-12-27 12:31:44:3144 [35mhttp[39m: [35mGET /api/user 401 1ms[39m
 2024-12-27 12:31:44:3144 [35mhttp[39m: [35mGET /api/user 401 in 1ms[39m
+2024-12-27 12:58:40:5840 [31merror[39m: [31mApplication Error column "google_id" does not exist[39m
+2024-12-27 12:58:40:5840 [35mhttp[39m: [35mPOST /api/login 500 1044ms[39m
+2024-12-27 12:58:40:5840 [35mhttp[39m: [35mPOST /api/login 500 in 1044ms :: {"message":"column \"google_id\" does not exis…[39m
+2024-12-27 12:58:40:5840 [35mhttp[39m: [35mGET /api/user 401 0ms[39m
+2024-12-27 12:58:40:5840 [35mhttp[39m: [35mGET /api/user 401 in 1ms[39m
+2024-12-27 13:15:23:1523 [31merror[39m: [31mApplication Error column "google_id" does not exist[39m
+2024-12-27 13:15:23:1523 [35mhttp[39m: [35mPOST /api/register 500 652ms[39m
+2024-12-27 13:15:23:1523 [35mhttp[39m: [35mPOST /api/register 500 in 653ms :: {"message":"column \"google_id\" does not ex…[39m
+2024-12-27 13:15:23:1523 [35mhttp[39m: [35mGET /api/user 401 1ms[39m
+2024-12-27 13:15:23:1523 [35mhttp[39m: [35mGET /api/user 401 in 2ms[39m
+2024-12-27 13:15:30:1530 [31merror[39m: [31mApplication Error column "google_id" does not exist[39m
+2024-12-27 13:15:30:1530 [35mhttp[39m: [35mPOST /api/register 500 108ms[39m
+2024-12-27 13:15:30:1530 [35mhttp[39m: [35mPOST /api/register 500 in 108ms :: {"message":"column \"google_id\" does not ex…[39m
+2024-12-27 13:15:30:1530 [35mhttp[39m: [35mGET /api/user 401 0ms[39m
+2024-12-27 13:15:30:1530 [35mhttp[39m: [35mGET /api/user 401 in 1ms[39m
