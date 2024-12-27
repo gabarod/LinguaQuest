@@ -216,11 +216,44 @@ export const sessionFeedback = pgTable("session_feedback", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const flashcards = pgTable("flashcards", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  term: text("term").notNull(),
+  definition: text("definition").notNull(),
+  context: text("context"),
+  examples: text("examples").array(),
+  difficulty: decimal("difficulty").notNull().default("1.0"),
+  lastReviewed: timestamp("last_reviewed"),
+  nextReview: timestamp("next_review"),
+  proficiency: integer("proficiency").default(0), // 0-5 scale
+  language: text("language").notNull(),
+  tags: text("tags").array(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const flashcardProgress = pgTable("flashcard_progress", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  flashcardId: integer("flashcard_id")
+    .notNull()
+    .references(() => flashcards.id),
+  correct: boolean("correct").notNull(),
+  responseTime: integer("response_time"), // in milliseconds
+  reviewedAt: timestamp("reviewed_at").defaultNow(),
+});
+
 export const userRelations = relations(users, ({ many }) => ({
   progress: many(userProgress),
   stats: many(userStats),
   milestones: many(userMilestones),
   challengeAttempts: many(userChallengeAttempts),
+  flashcards: many(flashcards),
+  flashcardProgress: many(flashcardProgress),
 }));
 
 export const lessonRelations = relations(lessons, ({ many }) => ({
@@ -336,6 +369,25 @@ export const sessionFeedbackRelations = relations(sessionFeedback, ({ one }) => 
   receiver: one(users, {
     fields: [sessionFeedback.receiverId],
     references: [users.id],
+  }),
+}));
+
+export const flashcardRelations = relations(flashcards, ({ one, many }) => ({
+  user: one(users, {
+    fields: [flashcards.userId],
+    references: [users.id],
+  }),
+  progress: many(flashcardProgress),
+}));
+
+export const flashcardProgressRelations = relations(flashcardProgress, ({ one }) => ({
+  user: one(users, {
+    fields: [flashcardProgress.userId],
+    references: [users.id],
+  }),
+  flashcard: one(flashcards, {
+    fields: [flashcardProgress.flashcardId],
+    references: [flashcards.id],
   }),
 }));
 
