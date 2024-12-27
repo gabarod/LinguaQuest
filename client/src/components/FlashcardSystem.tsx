@@ -18,59 +18,49 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, X, RotateCcw, Check, Clock } from "lucide-react";
+import { Plus, X, RotateCcw, Check, Clock, Image as ImageIcon } from "lucide-react";
 import type { SupportedLanguage } from "@db/schema";
 
 const flashcardSchema = z.object({
   term: z.string().min(1, "Term is required"),
   definition: z.string().min(1, "Definition is required"),
+  translation: z.string().min(1, "Translation is required"),
+  imageUrl: z.string().optional(),
   context: z.string().optional(),
   examples: z.array(z.string()),
   language: z.string(),
   tags: z.array(z.string()),
+  multipleChoiceOptions: z.array(z.string()).min(3, "At least 3 options are required"),
 });
 
 interface FlashcardData {
   id: number;
   term: string;
   definition: string;
+  translation: string;
+  imageUrl?: string;
   context?: string;
   examples: string[];
   language: string;
   tags: string[];
+  multipleChoiceOptions: string[];
   difficulty: number;
   lastReviewed?: string;
   nextReview?: string;
   proficiency: number;
+  wrongAttempts: number;
 }
 
 interface Props {
   language: SupportedLanguage;
 }
 
-// Algoritmo de repetición espaciada (SRS)
-const calculateNextReview = (
-  difficulty: number,
-  proficiency: number,
-  lastReviewed?: string
-): Date => {
-  // Intervalos base en días según dificultad y proficiencia
-  const baseInterval = Math.pow(2, proficiency) * (1 + difficulty * 0.5);
-
-  // Si es la primera vez, comenzar con un intervalo corto
-  if (!lastReviewed) {
-    return new Date(Date.now() + 1000 * 60 * 60 * 24); // 1 día
-  }
-
-  const lastDate = new Date(lastReviewed);
-  const nextDate = new Date(lastDate.getTime() + baseInterval * 24 * 60 * 60 * 1000);
-  return nextDate;
-};
-
 export function FlashcardSystem({ language }: Props) {
   const [isCreating, setIsCreating] = useState(false);
   const [isReviewing, setIsReviewing] = useState(false);
+  const [showAnswer, setShowAnswer] = useState(false);
   const [currentCard, setCurrentCard] = useState(0);
+  const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -79,10 +69,13 @@ export function FlashcardSystem({ language }: Props) {
     defaultValues: {
       term: "",
       definition: "",
+      translation: "",
+      imageUrl: "",
       context: "",
       examples: [],
       language,
       tags: [],
+      multipleChoiceOptions: [],
     },
   });
 
@@ -128,16 +121,16 @@ export function FlashcardSystem({ language }: Props) {
     mutationFn: async ({
       id,
       correct,
-      responseTime,
+      selectedOption,
     }: {
       id: number;
       correct: boolean;
-      responseTime: number;
+      selectedOption: string;
     }) => {
       const response = await fetch(`/api/flashcards/${id}/review`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ correct, responseTime }),
+        body: JSON.stringify({ correct, selectedOption }),
       });
 
       if (!response.ok) {
@@ -146,8 +139,21 @@ export function FlashcardSystem({ language }: Props) {
 
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/flashcards/review"] });
+
+      if (data.correct) {
+        toast({
+          title: "¡Correcto!",
+          description: "¡Muy bien! Sigamos practicando.",
+        });
+      } else {
+        toast({
+          title: "Casi...",
+          description: "Esta tarjeta aparecerá de nuevo más tarde para repasarla.",
+          variant: "destructive",
+        });
+      }
     },
   });
 
@@ -155,36 +161,45 @@ export function FlashcardSystem({ language }: Props) {
     createFlashcardMutation.mutate(data);
   };
 
+  const handleOptionSelect = (option: string) => {
+    if (!reviewCards?.[currentCard]) return;
+
+    const isCorrect = option === reviewCards[currentCard].definition;
+    setSelectedOption(option);
+
+    reviewFlashcardMutation.mutate({
+      id: reviewCards[currentCard].id,
+      correct: isCorrect,
+      selectedOption: option,
+    });
+
+    // Esperar un momento para mostrar el resultado antes de pasar a la siguiente tarjeta
+    setTimeout(() => {
+      if (currentCard + 1 < (reviewCards?.length ?? 0)) {
+        setCurrentCard(prev => prev + 1);
+        setSelectedOption(null);
+        setShowAnswer(false);
+      } else {
+        setIsReviewing(false);
+        toast({
+          title: "¡Repaso completado!",
+          description: "Has terminado tu sesión de repaso.",
+        });
+      }
+    }, 1500);
+  };
+
   const startReview = () => {
     setIsReviewing(true);
     setCurrentCard(0);
-  };
-
-  const handleReview = (correct: boolean) => {
-    if (!reviewCards?.[currentCard]) return;
-
-    const startTime = Date.now();
-    reviewFlashcardMutation.mutate({
-      id: reviewCards[currentCard].id,
-      correct,
-      responseTime: Date.now() - startTime,
-    });
-
-    if (currentCard + 1 < (reviewCards?.length ?? 0)) {
-      setCurrentCard(prev => prev + 1);
-    } else {
-      setIsReviewing(false);
-      toast({
-        title: "Review Complete",
-        description: "You've completed your flashcard review session!",
-      });
-    }
+    setShowAnswer(false);
+    setSelectedOption(null);
   };
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Flashcards</h2>
+        <h2 className="text-2xl font-bold">Vocabulario</h2>
         <div className="space-x-2">
           <Button
             variant={isCreating ? "destructive" : "default"}
@@ -193,19 +208,19 @@ export function FlashcardSystem({ language }: Props) {
             {isCreating ? (
               <>
                 <X className="w-4 h-4 mr-2" />
-                Cancel
+                Cancelar
               </>
             ) : (
               <>
                 <Plus className="w-4 h-4 mr-2" />
-                Create Flashcard
+                Agregar Palabra
               </>
             )}
           </Button>
           {!isCreating && (
             <Button onClick={startReview} disabled={isReviewing}>
               <RotateCcw className="w-4 h-4 mr-2" />
-              Review Cards
+              Practicar
             </Button>
           )}
         </div>
@@ -220,7 +235,7 @@ export function FlashcardSystem({ language }: Props) {
           >
             <Card>
               <CardHeader>
-                <CardTitle>Create New Flashcard</CardTitle>
+                <CardTitle>Agregar Nueva Palabra</CardTitle>
               </CardHeader>
               <CardContent>
                 <Form {...form}>
@@ -230,7 +245,21 @@ export function FlashcardSystem({ language }: Props) {
                       name="term"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Term</FormLabel>
+                          <FormLabel>Palabra</FormLabel>
+                          <FormControl>
+                            <Input {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={form.control}
+                      name="translation"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Traducción</FormLabel>
                           <FormControl>
                             <Input {...field} />
                           </FormControl>
@@ -244,7 +273,7 @@ export function FlashcardSystem({ language }: Props) {
                       name="definition"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Definition</FormLabel>
+                          <FormLabel>Definición</FormLabel>
                           <FormControl>
                             <Textarea {...field} />
                           </FormControl>
@@ -255,12 +284,12 @@ export function FlashcardSystem({ language }: Props) {
 
                     <FormField
                       control={form.control}
-                      name="context"
+                      name="imageUrl"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Context (Optional)</FormLabel>
+                          <FormLabel>URL de la Imagen (Opcional)</FormLabel>
                           <FormControl>
-                            <Input {...field} />
+                            <Input {...field} type="url" />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -268,7 +297,7 @@ export function FlashcardSystem({ language }: Props) {
                     />
 
                     <Button type="submit" disabled={createFlashcardMutation.isPending}>
-                      Create Flashcard
+                      Crear Tarjeta
                     </Button>
                   </form>
                 </Form>
@@ -287,45 +316,62 @@ export function FlashcardSystem({ language }: Props) {
               <CardContent className="pt-6">
                 <div className="flex flex-col items-center space-y-6">
                   <div className="text-sm text-muted-foreground">
-                    Card {currentCard + 1} of {reviewCards.length}
+                    Tarjeta {currentCard + 1} de {reviewCards.length}
                   </div>
 
-                  <div className="w-full aspect-[3/2] relative perspective-1000">
+                  <div className="w-full max-w-md aspect-[3/2] relative perspective-1000">
                     <motion.div
                       className="w-full h-full [transform-style:preserve-3d] cursor-pointer"
-                      animate={{ rotateY: 180 }}
+                      animate={{ rotateY: showAnswer ? 180 : 0 }}
                       transition={{ duration: 0.6 }}
+                      onClick={() => !selectedOption && setShowAnswer(!showAnswer)}
                     >
                       <div className="absolute inset-0 backface-hidden">
                         <div className="flex flex-col items-center justify-center h-full p-6 text-center">
                           <h3 className="text-2xl font-bold mb-4">
                             {reviewCards[currentCard].term}
                           </h3>
-                          {reviewCards[currentCard].context && (
-                            <p className="text-sm text-muted-foreground">
-                              {reviewCards[currentCard].context}
-                            </p>
+                          {reviewCards[currentCard].imageUrl && (
+                            <img
+                              src={reviewCards[currentCard].imageUrl}
+                              alt={reviewCards[currentCard].term}
+                              className="max-h-32 mb-4 object-contain"
+                            />
                           )}
+                        </div>
+                      </div>
+
+                      <div className="absolute inset-0 backface-hidden [transform:rotateY(180deg)]">
+                        <div className="flex flex-col items-center justify-center h-full p-6">
+                          <p className="text-xl mb-2">{reviewCards[currentCard].translation}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {reviewCards[currentCard].definition}
+                          </p>
                         </div>
                       </div>
                     </motion.div>
                   </div>
 
-                  <div className="flex gap-4">
-                    <Button
-                      variant="destructive"
-                      onClick={() => handleReview(false)}
-                    >
-                      <X className="w-4 h-4 mr-2" />
-                      Incorrect
-                    </Button>
-                    <Button
-                      variant="default"
-                      onClick={() => handleReview(true)}
-                    >
-                      <Check className="w-4 h-4 mr-2" />
-                      Correct
-                    </Button>
+                  <div className="grid grid-cols-2 gap-4 w-full max-w-md">
+                    {reviewCards[currentCard].multipleChoiceOptions.map((option, index) => (
+                      <Button
+                        key={index}
+                        variant={
+                          selectedOption
+                            ? option === reviewCards[currentCard].definition
+                              ? "default"
+                              : option === selectedOption
+                              ? "destructive"
+                              : "outline"
+                            : "outline"
+                        }
+                        className="h-auto py-4 text-left"
+                        onClick={() => !selectedOption && handleOptionSelect(option)}
+                        disabled={!!selectedOption}
+                      >
+                        {option}
+                      </Button>
+                    ))}
                   </div>
                 </div>
               </CardContent>
@@ -342,17 +388,23 @@ export function FlashcardSystem({ language }: Props) {
             {flashcards.map((flashcard) => (
               <Card key={flashcard.id}>
                 <CardContent className="pt-6">
-                  <h3 className="font-bold mb-2">{flashcard.term}</h3>
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="font-bold">{flashcard.term}</h3>
+                    {flashcard.imageUrl && (
+                      <ImageIcon className="w-4 h-4 text-muted-foreground" />
+                    )}
+                  </div>
+                  <p className="text-sm font-medium mb-1">{flashcard.translation}</p>
                   <p className="text-sm text-muted-foreground mb-4">
                     {flashcard.definition}
                   </p>
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Clock className="w-4 h-4" />
                     <span>
-                      Next review:{" "}
+                      Próximo repaso:{" "}
                       {flashcard.nextReview
                         ? new Date(flashcard.nextReview).toLocaleDateString()
-                        : "Not reviewed yet"}
+                        : "No repasado aún"}
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-2 mt-4">

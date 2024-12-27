@@ -5,18 +5,18 @@ import { db } from "@db";
 import { sql } from "drizzle-orm";
 import { lessons, exercises, userProgress, userStats, milestones, userMilestones, dailyChallenges, userChallengeAttempts, users, flashcards, flashcardProgress, difficultyPreferences, languages, userLanguages, communityPosts, postLikes, postComments, quizzes, quizAttempts, pronunciationAttempts } from "@db/schema";
 import { eq, and, gte, lte, desc, or, asc } from "drizzle-orm";
-import { format, subDays } from "date-fns";
-import { ChatService } from "./services/chatService";
-import { BuddyService } from "./services/buddyService";
-import { LanguageExchangeService } from "./services/languageExchangeService";
-import { PronunciationService } from "./services/pronunciationService";
+import { format, subDays, addDays } from "date-fns";
 import multer from "multer";
 import learningPathRouter from "./routes/learningPath";
 import { logger } from './services/loggingService';
 import { SpacedRepetitionService } from './services/spacedRepetitionService';
 import {BuddyRecommendationService} from "./services/buddyRecommendationService";
 import { QuizGeneratorService } from "./services/quizGeneratorService";
-import { type User } from "@db/schema";
+import type { User } from "@db/schema";
+import { ChatService } from "./services/chatService";
+import { BuddyService } from "./services/buddyService";
+import { LanguageExchangeService } from "./services/languageExchangeService";
+import { PronunciationService } from "./services/pronunciationService";
 
 
 export function registerRoutes(app: Express): Server {
@@ -1720,6 +1720,180 @@ export function registerRoutes(app: Express): Server {
     } catch (error) {
       console.error("Error fetching pronunciation challenges:", error);
       res.status(500).send("Failed to fetch challenges");
+    }
+  });
+
+  // Flashcard System Routes
+  app.get("/api/flashcards", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    try {
+      const userFlashcards = await db.query.flashcards.findMany({
+        where: eq(flashcards.userId, userId),
+        orderBy: desc(flashcards.createdAt),
+      });
+
+      res.json(userFlashcards);
+    } catch (error) {
+      console.error("Error fetching flashcards:", error);
+      res.status(500).send("Failed to fetch flashcards");
+    }
+  });
+
+  app.get("/api/flashcards/review", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    try {
+      // Get cards that are due for review based on spaced repetition
+      const dueCards = await db
+        .select({
+          ...flashcards,
+          progress: {
+            easeFactor: flashcardProgress.easeFactor,
+            interval: flashcardProgress.interval,
+            consecutiveCorrect: flashcardProgress.consecutiveCorrect,
+          },
+        })
+        .from(flashcards)
+        .leftJoin(
+          flashcardProgress,
+          and(
+            eq(flashcardProgress.flashcardId, flashcards.id),
+            eq(flashcardProgress.userId, userId)
+          )
+        )
+        .where(
+          and(
+            eq(flashcards.userId, userId),
+            or(
+              eq(flashcards.lastReviewed, null),
+              lte(flashcards.nextReview, new Date())
+            )
+          )
+        )
+        .limit(10);
+
+      res.json(dueCards);
+    } catch (error) {
+      console.error("Error fetching review cards:", error);
+      res.status(500).send("Failed to fetch review cards");
+    }
+  });
+
+  app.post("/api/flashcards", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    const { front, back, translation, imageUrl, language, category, tags, multipleChoiceOptions } = req.body;
+
+    try {
+      const [newCard] = await db
+        .insert(flashcards)
+        .values({
+          front,
+          back,
+          translation,
+          imageUrl,
+          language,
+          category,
+          tags,
+          multipleChoiceOptions,
+          userId,
+        })
+        .returning();
+
+      res.json(newCard);
+    } catch (error) {
+      console.error("Error creating flashcard:", error);
+      res.status(500).send("Failed to create flashcard");
+    }
+  });
+
+  app.post("/api/flashcards/:id/review", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    const flashcardId = parseInt(req.params.id);
+    const { correct, selectedOption } = req.body;
+
+    try {
+      await db.transaction(async (tx) => {
+        // Get current progress
+        const [currentProgress] = await tx
+          .select()
+          .from(flashcardProgress)
+          .where(
+            and(
+              eq(flashcardProgress.userId, userId),
+              eq(flashcardProgress.flashcardId, flashcardId)
+            )
+          );
+
+        // Calculate new spaced repetition values
+        let easeFactor = currentProgress?.easeFactor || 2.5;
+        let interval = currentProgress?.interval || 1;
+        let consecutiveCorrect = currentProgress?.consecutiveCorrect || 0;
+
+        if (correct) {
+          consecutiveCorrect++;
+          interval = Math.round(interval * easeFactor);
+          easeFactor = Math.min(easeFactor + 0.1, 2.5);
+        } else {
+          consecutiveCorrect = 0;
+          interval = 1;
+          easeFactor = Math.max(easeFactor - 0.2, 1.3);
+        }
+
+        // Calculate next review date
+        const nextReview = addDays(new Date(), interval);
+
+        // Update or create progress record
+        await tx
+          .insert(flashcardProgress)
+          .values({
+            userId,
+            flashcardId,
+            easeFactor,
+            interval,
+            consecutiveCorrect,
+            nextReviewAt: nextReview,
+          })
+          .onConflictDoUpdate({
+            target: [flashcardProgress.userId, flashcardProgress.flashcardId],
+            set: {
+              easeFactor,
+              interval,
+              consecutiveCorrect,
+              nextReviewAt: nextReview,
+              lastReviewedAt: new Date(),
+            },
+          });
+
+        // Update flashcard record
+        await tx
+          .update(flashcards)
+          .set({
+            lastReviewed: new Date(),
+            nextReview,
+            wrongAttempts: sql`CASE WHEN ${!correct} THEN wrong_attempts + 1 ELSE wrong_attempts END`,
+          })
+          .where(eq(flashcards.id, flashcardId));
+      });
+
+      res.json({ success: true, correct });
+    } catch (error) {
+      console.error("Error updating flashcard review:", error);
+      res.status(500).send("Failed to update flashcard review");
     }
   });
 

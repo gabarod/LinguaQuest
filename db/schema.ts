@@ -306,15 +306,20 @@ export const flashcards = pgTable("flashcards", {
   userId: integer("user_id").references(() => users.id).notNull(),
   front: text("front").notNull(),
   back: text("back").notNull(),
+  imageUrl: text("image_url"),
+  translation: text("translation").notNull(),
   language: text("language").notNull(),
   category: text("category").notNull(),
   tags: text("tags").array(),
+  multipleChoiceOptions: jsonb("multiple_choice_options").array(),
+  wrongAttempts: integer("wrong_attempts").default(0),
   lastReviewed: timestamp("last_reviewed"),
   nextReview: timestamp("next_review"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Update flashcard progress to include more detailed tracking
 export const flashcardProgress = pgTable("flashcard_progress", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id).notNull(),
@@ -322,6 +327,8 @@ export const flashcardProgress = pgTable("flashcard_progress", {
   easeFactor: decimal("ease_factor", { precision: 5, scale: 2 }).notNull().default("2.5"),
   interval: integer("interval").notNull().default(1),
   consecutiveCorrect: integer("consecutive_correct").notNull().default(0),
+  totalAttempts: integer("total_attempts").notNull().default(0),
+  correctAttempts: integer("correct_attempts").notNull().default(0),
   lastReviewedAt: timestamp("last_reviewed_at").defaultNow(),
   nextReviewAt: timestamp("next_review_at").notNull(),
 });
