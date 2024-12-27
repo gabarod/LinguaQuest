@@ -1,15 +1,19 @@
 import { useUser } from "@/hooks/use-user";
 import { useLesson } from "@/hooks/use-lesson";
+import { useProgress } from "@/hooks/use-progress";
 import { Navigation } from "@/components/Navigation";
 import { LessonCard } from "@/components/LessonCard";
 import { ProgressBar } from "@/components/ProgressBar";
+import { ProgressChart } from "@/components/ProgressChart";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Loader2 } from "lucide-react";
 import { useLocation } from "wouter";
 
 export default function HomePage() {
   const { user } = useUser();
-  const { lessons, progress } = useLesson();
+  const { lessons } = useLesson();
+  const { progress, isLoading } = useProgress();
   const [, setLocation] = useLocation();
 
   return (
@@ -24,6 +28,22 @@ export default function HomePage() {
             streak={progress?.streak || 0}
           />
         </section>
+
+        {isLoading ? (
+          <div className="flex justify-center py-8">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : (
+          <section className="mb-8">
+            <h2 className="text-xl font-semibold mb-4">Your Progress</h2>
+            {progress && (
+              <ProgressChart
+                weeklyProgress={progress.weeklyProgress}
+                skillDistribution={progress.skillDistribution}
+              />
+            )}
+          </section>
+        )}
 
         <section>
           <div className="flex justify-between items-center mb-4">

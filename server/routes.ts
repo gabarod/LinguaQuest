@@ -5,6 +5,7 @@ import { db } from "@db";
 import { sql } from "drizzle-orm";
 import { lessons, exercises, userProgress, userStats } from "@db/schema";
 import { eq } from "drizzle-orm";
+import { format, subDays } from "date-fns";
 
 export function registerRoutes(app: Express): Server {
   setupAuth(app);
@@ -125,6 +126,61 @@ export function registerRoutes(app: Express): Server {
       streak: 0,
       lastActivity: new Date(),
     });
+  });
+
+  // New detailed progress endpoint
+  app.get("/api/progress/detailed", async (req, res) => {
+    if (!req.user?.id) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    try {
+      // Get weekly progress
+      const weeklyProgress = await Promise.all(
+        Array.from({ length: 7 }, (_, i) => {
+          const date = subDays(new Date(), i);
+          return db
+            .select({
+              points: sql<number>`sum(${lessons.points})`,
+              exercises: sql<number>`count(*)`,
+            })
+            .from(userProgress)
+            .where(sql`date(${userProgress.completedAt}) = ${format(date, 'yyyy-MM-dd')}`)
+            .then(([result]) => ({
+              day: format(date, 'EEE'),
+              points: result?.points || 0,
+              exercises: result?.exercises || 0,
+            }));
+        })
+      );
+
+      // Get skill distribution
+      const skillDistribution = await db
+        .select({
+          skill: lessons.type,
+          value: sql<number>`count(*)`,
+        })
+        .from(userProgress)
+        .innerJoin(lessons, eq(lessons.id, userProgress.lessonId))
+        .where(eq(userProgress.userId, req.user.id))
+        .groupBy(lessons.type);
+
+      // Get user stats
+      const stats = await db.query.userStats.findFirst({
+        where: eq(userStats.userId, req.user.id),
+      });
+
+      res.json({
+        weeklyProgress: weeklyProgress.reverse(),
+        skillDistribution,
+        totalPoints: stats?.totalPoints || 0,
+        lessonsCompleted: stats?.lessonsCompleted || 0,
+        streak: stats?.streak || 0,
+      });
+    } catch (error) {
+      console.error("Error fetching detailed progress:", error);
+      res.status(500).send("Failed to fetch progress data");
+    }
   });
 
   const httpServer = createServer(app);
