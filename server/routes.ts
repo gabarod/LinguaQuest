@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { setupAuth } from "./auth";
 import { db } from "@db";
 import { sql } from "drizzle-orm";
-import { lessons, exercises, userProgress, userStats, milestones, userMilestones, dailyChallenges, userChallengeAttempts, users, flashcards, flashcardProgress, difficultyPreferences, languages, userLanguages } from "@db/schema";
+import { lessons, exercises, userProgress, userStats, milestones, userMilestones, dailyChallenges, userChallengeAttempts, users, flashcards, flashcardProgress, difficultyPreferences, languages, userLanguages, communityPosts, postLikes, postComments } from "@db/schema";
 import { eq, and, gte, lte, desc, or, asc } from "drizzle-orm";
 import { format, subDays } from "date-fns";
 import { ChatService } from "./services/chatService";
@@ -12,8 +12,9 @@ import { LanguageExchangeService } from "./services/languageExchangeService";
 import { PronunciationService } from "./services/pronunciationService";
 import multer from "multer";
 import learningPathRouter from "./routes/learningPath";
-import { logger } from './services/loggingService'; // Fix the import path
+import { logger } from './services/loggingService';
 import { SpacedRepetitionService } from './services/spacedRepetitionService';
+import {BuddyRecommendationService} from "./services/buddyRecommendationService";
 
 
 export function registerRoutes(app: Express): Server {
@@ -1352,6 +1353,216 @@ export function registerRoutes(app: Express): Server {
 
   // Register learning path routes
   app.use(learningPathRouter);
+
+  // Community Board endpoints
+  app.get("/api/community/posts", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    try {
+      const posts = await db
+        .select({
+          id: communityPosts.id,
+          userId: communityPosts.userId,
+          username: users.username,
+          userAvatar: users.avatar,
+          content: communityPosts.content,
+          targetLanguage: communityPosts.targetLanguage,
+          nativeLanguage: sql<string>`(
+            SELECT language_code
+            FROM user_languages
+            WHERE user_id = ${communityPosts.userId}
+            AND is_native = true
+            LIMIT 1
+          )`,
+          tags: communityPosts.tags,
+          likes: sql<number>`count(distinct ${postLikes.id})`,
+          comments: sql<number>`count(distinct ${postComments.id})`,
+          createdAt: communityPosts.createdAt,
+        })
+        .from(communityPosts)
+        .leftJoin(postLikes, eq(postLikes.postId, communityPosts.id))
+        .leftJoin(postComments, eq(postComments.postId, communityPosts.id))
+        .innerJoin(users, eq(users.id, communityPosts.userId))
+        .groupBy(
+          communityPosts.id,
+          users.username,
+          users.avatar,
+        )
+        .orderBy(desc(communityPosts.createdAt))
+        .limit(50);
+
+      logger.info('Retrieved community posts', {
+        userId,
+        postCount: posts.length,
+        timestamp: new Date()
+      });
+
+      res.json(posts);
+    } catch (error) {
+      logger.error('Error retrieving community posts', {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+        timestamp: new Date()
+      });
+      res.status(500).send("Failed to retrieve community posts");
+    }
+  });
+
+  app.post("/api/community/posts", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    const { content, targetLanguage, tags } = req.body;
+
+    if (!content?.trim()) {
+      return res.status(400).send("Content is required");
+    }
+
+    try {
+      const [post] = await db
+        .insert(communityPosts)
+        .values({
+          userId,
+          content,
+          targetLanguage,
+          tags,
+        })
+        .returning();
+
+      logger.info('Created community post', {
+        userId,
+        postId: post.id,
+        timestamp: new Date()
+      });
+
+      res.json(post);
+    } catch (error) {
+      logger.error('Error creating community post', {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+        timestamp: new Date()
+      });
+      res.status(500).send("Failed to create post");
+    }
+  });
+
+  app.post("/api/community/posts/:id/like", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    const postId = parseInt(req.params.id);
+
+    try {
+      // Check if the post exists
+      const post = await db.query.communityPosts.findFirst({
+        where: eq(communityPosts.id, postId),
+      });
+
+      if (!post) {
+        return res.status(404).send("Post not found");
+      }
+
+      // Toggle like status
+      const existingLike = await db.query.postLikes.findFirst({
+        where: and(
+          eq(postLikes.userId, userId),
+          eq(postLikes.postId, postId)
+        ),
+      });
+
+      if (existingLike) {
+        await db
+          .delete(postLikes)
+          .where(
+            and(
+              eq(postLikes.userId, userId),
+              eq(postLikes.postId, postId)
+            )
+          );
+      } else {
+        await db
+          .insert(postLikes)
+          .values({
+            userId,
+            postId,
+          });
+      }
+
+      logger.info('Toggled post like', {
+        userId,
+        postId,
+        action: existingLike ? 'unliked' : 'liked',
+        timestamp: new Date()
+      });
+
+      res.json({ success: true, liked: !existingLike });
+    } catch (error) {
+      logger.error('Error toggling post like', {
+        userId,
+        postId,
+        error: error instanceof Error ? error.message : String(error),
+        timestamp: new Date()
+      });
+      res.status(500).send("Failed to update like status");
+    }
+  });
+
+  app.post("/api/community/posts/:id/comments", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    const postId = parseInt(req.params.id);
+    const { content } = req.body;
+
+    if (!content?.trim()) {
+      return res.status(400).send("Comment content is required");
+    }
+
+    try {
+      const post = await db.query.communityPosts.findFirst({
+        where: eq(communityPosts.id, postId),
+      });
+
+      if (!post) {
+        return res.status(404).send("Post not found");
+      }
+
+      const [comment] = await db
+        .insert(postComments)
+        .values({
+          userId,
+          postId,
+          content,
+        })
+        .returning();
+
+      logger.info('Created post comment', {
+        userId,
+        postId,
+        commentId: comment.id,
+        timestamp: new Date()
+      });
+
+      res.json(comment);
+    } catch (error) {
+      logger.error('Error creating post comment', {
+        userId,
+        postId,
+        error: error instanceof Error ? error.message : String(error),
+        timestamp: new Date()
+      });
+      res.status(500).send("Failed to create comment");
+    }
+  });
 
   return httpServer;
 }

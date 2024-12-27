@@ -11,6 +11,7 @@ import LessonPage from "./pages/LessonPage";
 import GamesPage from "./pages/GamesPage";
 import LeaderboardPage from "./pages/LeaderboardPage";
 import LanguageExchangePage from "./pages/LanguageExchangePage";
+import CommunityPage from "./pages/CommunityPage";
 import { FlashcardsPage } from "./pages/FlashcardsPage";
 import { OnboardingTutorial } from "./components/OnboardingTutorial";
 import { ProgressCelebration } from "./components/ProgressCelebration";
@@ -41,6 +42,7 @@ function App() {
         <Route path="/games" component={GamesPage} />
         <Route path="/leaderboard" component={LeaderboardPage} />
         <Route path="/language-exchange" component={LanguageExchangePage} />
+        <Route path="/community" component={CommunityPage} />
       </Switch>
       <ProgressCelebration />
     </>
