@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
+import confetti from "canvas-confetti";
 
 interface ShareAchievementProps {
   title: string;
@@ -32,6 +33,37 @@ export function ShareAchievement({ title, description, points, type }: ShareAchi
     url: window.location.href,
   };
 
+  const triggerConfetti = () => {
+    // Create a celebratory confetti burst
+    const colors = ['#FFD700', '#FFA500', '#FF69B4', '#00CED1', '#9370DB'];
+    const end = Date.now() + 1500;
+
+    (function frame() {
+      confetti({
+        particleCount: 6,
+        angle: 60,
+        spread: 75,
+        origin: { x: 0.2 },
+        colors: colors,
+        shapes: ['star', 'circle'],
+        scalar: 2
+      });
+      confetti({
+        particleCount: 6,
+        angle: 120,
+        spread: 75,
+        origin: { x: 0.8 },
+        colors: colors,
+        shapes: ['star', 'circle'],
+        scalar: 2
+      });
+
+      if (Date.now() < end) {
+        requestAnimationFrame(frame);
+      }
+    }());
+  };
+
   const handleShare = async (platform?: string) => {
     try {
       if (!platform && navigator.share) {
@@ -44,6 +76,7 @@ export function ShareAchievement({ title, description, points, type }: ShareAchi
           title: "Shared successfully!",
           description: "Your achievement has been shared with your friends.",
         });
+        triggerConfetti();
         return;
       }
 
@@ -72,6 +105,7 @@ export function ShareAchievement({ title, description, points, type }: ShareAchi
           title: "Opening share dialog",
           description: `Sharing your achievement on ${platform}...`,
         });
+        triggerConfetti();
       }
     } catch (error) {
       toast({

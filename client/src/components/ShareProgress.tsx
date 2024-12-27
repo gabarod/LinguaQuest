@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Share2, Download } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
+import confetti from "canvas-confetti";
 
 interface ProgressStats {
   totalPoints: number;
@@ -28,6 +29,34 @@ export function ShareProgress() {
   const { data: progress } = useQuery<ProgressStats>({
     queryKey: ["/api/progress/detailed"],
   });
+
+  const triggerConfetti = () => {
+    const end = Date.now() + 1000;
+
+    // Create a confetti animation that bursts from the center
+    const colors = ['#ff0000', '#00ff00', '#0000ff', '#ffff00', '#ff00ff'];
+
+    (function frame() {
+      confetti({
+        particleCount: 7,
+        angle: 60,
+        spread: 55,
+        origin: { x: 0.2 },
+        colors: colors
+      });
+      confetti({
+        particleCount: 7,
+        angle: 120,
+        spread: 55,
+        origin: { x: 0.8 },
+        colors: colors
+      });
+
+      if (Date.now() < end) {
+        requestAnimationFrame(frame);
+      }
+    }());
+  };
 
   const generateShareableCard = async () => {
     setIsGenerating(true);
@@ -55,7 +84,7 @@ export function ShareProgress() {
       ctx.fillStyle = "hsl(var(--foreground))";
       ctx.font = "bold 48px system-ui";
       ctx.textAlign = "center";
-      
+
       // Title
       ctx.fillText("My Language Learning Journey", canvas.width / 2, 100);
 
@@ -82,7 +111,7 @@ export function ShareProgress() {
       if (navigator.share) {
         const blob = await (await fetch(imageUrl)).blob();
         const file = new File([blob], "language-progress.png", { type: "image/png" });
-        
+
         await navigator.share({
           title: "My Language Learning Progress",
           text: "Check out my language learning progress!",
@@ -95,6 +124,9 @@ export function ShareProgress() {
         link.href = imageUrl;
         link.click();
       }
+
+      // Trigger confetti animation
+      triggerConfetti();
 
       toast({
         title: "Progress card generated!",
