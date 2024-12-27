@@ -4,7 +4,7 @@ import { setupAuth } from "./auth";
 import { db } from "@db";
 import { sql } from "drizzle-orm";
 import { lessons, exercises, userProgress, userStats, milestones, userMilestones, dailyChallenges, userChallengeAttempts, users, flashcards, flashcardProgress, difficultyPreferences, languages, userLanguages } from "@db/schema";
-import { eq, and, gte, lte, desc, or } from "drizzle-orm";
+import { eq, and, gte, lte, desc, or, asc } from "drizzle-orm";
 import { format, subDays } from "date-fns";
 import { ChatService } from "./services/chatService";
 import { BuddyService } from "./services/buddyService";
@@ -12,6 +12,9 @@ import { LanguageExchangeService } from "./services/languageExchangeService";
 import { PronunciationService } from "./services/pronunciationService";
 import multer from "multer";
 import learningPathRouter from "./routes/learningPath";
+import { logger } from './services/loggingService'; // Fix the import path
+import { SpacedRepetitionService } from './services/spacedRepetitionService';
+
 
 export function registerRoutes(app: Express): Server {
   // Create HTTP server
@@ -1218,227 +1221,132 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Flashcard routes with proper error handling and logging
   app.get("/api/flashcards/review", async (req, res) => {
     const userId = req.user?.id;
     if (!userId) {
       return res.status(401).send("Not authenticated");
     }
 
-    const { language } = req.query;
-
     try {
-      // Obtener flashcards que necesitan revisión
-      const dueFlashcards = await db
-        .select()
-        .from(flashcards)
-        .where(
-          and(
-            eq(flashcards.userId, userId),
-            or(
-              sql`${flashcards.nextReview} IS NULL`,
-              sql`${flashcards.nextReview} <= NOW()`
-            )
+      const now = new Date();
+      const dueCards = await db.query.flashcards.findMany({
+        where: and(
+          eq(flashcards.userId, userId),
+          or(
+            eq(flashcards.nextReview, null),
+            lte(flashcards.nextReview, now)
           )
-        )
-        .orderBy(flashcards.lastReviewed)
-        .limit(10);
+        ),
+        orderBy: [
+          asc(flashcards.nextReview),
+          desc(flashcards.proficiency)
+        ],
+        limit: 20
+      });
 
-      res.json(dueFlashcards);
+      logger.info('Retrieved due flashcards', {
+        userId,
+        cardCount: dueCards.length,
+        timestamp: now
+      });
+
+      res.json(dueCards);
     } catch (error) {
-      console.error("Error fetching flashcards for review:", error);
-      res.status(500).send("Failed to fetch flashcards for review");
+      logger.error('Error retrieving flashcards', {
+        userId,
+        error: error instanceof Error ? error.message : String(error),
+        timestamp: new Date()
+      });
+      res.status(500).send("Failed to retrieve flashcards");
     }
   });
 
-  app.post("/api/flashcards/:id/review", async (req, res) => {
+  app.post("/api/flashcards/:id/progress", async (req, res) => {
     const userId = req.user?.id;
     if (!userId) {
       return res.status(401).send("Not authenticated");
     }
 
     const flashcardId = parseInt(req.params.id);
-    const { correct, responseTime } = req.body;
+    const { quality, responseTime } = req.body;
+
+    if (typeof quality !== 'number' || quality < 0 || quality > 5) {
+      return res.status(400).send("Invalid quality rating");
+    }
 
     try {
+      const flashcard = await db.query.flashcards.findFirst({
+        where: and(
+          eq(flashcards.id, flashcardId),
+          eq(flashcards.userId, userId)
+        )
+      });
+
+      if (!flashcard) {
+        return res.status(404).send("Flashcard not found");
+      }
+
+      const srs = SpacedRepetitionService.calculateNextReview(
+        quality,
+        flashcard.easeFactor || 2.5,
+        flashcard.intervalDays || 1,
+        flashcard.consecutiveCorrect || 0
+      );
+
+      // Calculate new difficulty based on performance
+      const newDifficulty = SpacedRepetitionService.calculateNewDifficulty(
+        flashcard.difficulty,
+        quality,
+        responseTime
+      );
+
       await db.transaction(async (tx) => {
-        // Registrar el progreso de la revisión
-        await tx.insert(flashcardProgress).values({
-          userId,
-          flashcardId,
-          correct,
-          responseTime,
-          reviewedAt: new Date(),
-        });
-
-        // Actualizar la flashcard
-        const [flashcard] = await tx
-          .select()
-          .from(flashcards)
-          .where(
-            and(
-              eq(flashcards.id, flashcardId),
-              eq(flashcards.userId, userId)
-            )
-          );
-
-        if (!flashcard) {
-          throw new Error("Flashcard not found");
-        }
-
-        // Calcular nuevo intervalo de revisión basado en el algoritmo SM-2
-        const newProficiency = correct
-          ? Math.min(flashcard.proficiency + 1, 5)
-          : Math.max(flashcard.proficiency - 1, 0);
-
-        const intervalDays = Math.pow(2, newProficiency);
-        const nextReview = new Date();
-        nextReview.setDate(nextReview.getDate() + intervalDays);
-
-        // Actualizar la flashcard con los nuevos valores
+        // Update flashcard
         await tx
           .update(flashcards)
           .set({
-            proficiency: newProficiency,
+            easeFactor: srs.easeFactor,
+            intervalDays: srs.intervalDays,
+            nextReview: srs.nextReview,
             lastReviewed: new Date(),
-            nextReview,
-            difficulty: correct
-              ? Math.max(flashcard.difficulty - 0.1, 1.0)
-              : Math.min(flashcard.difficulty + 0.1, 5.0),
+            difficulty: newDifficulty,
+            proficiency: quality >= 4 ? (flashcard.proficiency || 0) + 1 : 0,
+            consecutiveCorrect: quality >= 3 ? (flashcard.consecutiveCorrect || 0) + 1 : 0
           })
           .where(eq(flashcards.id, flashcardId));
+
+        // Record progress
+        await tx
+          .insert(flashcardProgress)
+          .values({
+            userId,
+            flashcardId,
+            quality,
+            responseTime,
+            easeFactor: srs.easeFactor,
+            intervalDays: srs.intervalDays,
+            correct: quality >= 3
+          });
       });
 
-      res.json({ success: true });
+      logger.info('Recorded flashcard progress', {
+        userId,
+        flashcardId,
+        quality,
+        newInterval: srs.intervalDays,
+        timestamp: new Date()
+      });
+
+      res.json({ success: true, nextReview: srs.nextReview });
     } catch (error) {
-      console.error("Error updating flashcard review:", error);
-      res.status(500).send("Failed to update flashcard review");
-    }
-  });
-
-  // Get weekly challenge leaderboard
-  app.get("/api/leaderboard/weekly-challenge", async (req, res) => {
-    try {
-      const startOfWeek = new Date();
-      startOfWeek.setHours(0, 0, 0, 0);
-      startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
-
-      const leaderboard = await db
-        .select({
-          id: users.id,
-          username: users.username,
-          weeklyXP: userStats.weeklyXP,
-          weeklyRank: sql<number>`rank() over (order by ${userStats.weeklyXP} desc)`,
-          challengesCompleted: sql<number>`count(distinct ${userChallengeAttempts.challengeId})`,
-          averageScore: sql<number>`avg(${userChallengeAttempts.score})`,
-        })
-        .from(userStats)
-        .innerJoin(users, eq(users.id, userStats.userId))
-        .leftJoin(
-          userChallengeAttempts,
-          and(
-            eq(userChallengeAttempts.userId, users.id),
-            gte(userChallengeAttempts.completedAt, startOfWeek)
-          )
-        )
-        .groupBy(users.id, users.username, userStats.weeklyXP)
-        .orderBy(desc(userStats.weeklyXP))
-        .limit(100);
-
-      res.json(leaderboard);
-    } catch (error) {
-      console.error("Error fetching weekly challenge leaderboard:", error);
-      res.status(500).send("Failed to fetch weekly challenge leaderboard");
-    }
-  });
-
-  // Reset weekly XP at the start of each week
-  app.post("/api/leaderboard/weekly-reset", async (req, res) => {
-    try {
-      await db
-        .update(userStats)
-        .set({
-          weeklyXP: 0,
-          lastWeeklyReset: new Date(),
-        });
-
-      res.json({ success: true });
-    } catch (error) {
-      console.error("Error resetting weekly XP:", error);
-      res.status(500).send("Failed to reset weekly XP");
-    }
-  });
-
-  // Get conversation starters
-  app.get("/api/chat/starters", async (req, res) => {
-    const userId = req.user?.id;
-    if (!userId) {
-      return res.status(401).send("Not authenticated");
-    }
-
-    const { language } = req.query;
-    if (!language || typeof language !== "string") {
-      return res.status(400).send("Language parameter is required");
-    }
-
-    if (!ChatService.isSupportedLanguage(language)) {
-      return res.status(400).send("Unsupported language");
-    }
-
-    try {
-      // Get user's skill level
-      const [preferences] = await db
-        .select()
-        .from(difficultyPreferences)
-        .where(eq(difficultyPreferences.userId, userId));
-
-      const skillLevel = preferences?.preferredLevel || "beginner";
-
-      const starters = await ChatService.generateConversationStarters(language, skillLevel);
-      res.json(starters);
-    } catch (error) {
-      console.error("Error generating conversation starters:", error);
-      res.status(500).send("Failed to generate conversation starters");
-    }
-  });
-
-  app.get("/api/user/preferences", async (req, res) => {
-    const userId = req.user?.id;
-    if (!userId) {
-      return res.status(401).send("Not authenticated");
-    }
-
-    try {
-      const [preferences] = await db
-        .select()
-        .from(difficultyPreferences)
-        .where(eq(difficultyPreferences.userId, userId));
-
-      if (!preferences) {
-        // Create default preferences if none exist
-        const defaultPreferences = {
-          userId,
-          preferredLevel: "beginner",
-          adaptiveMode: true,
-          skillLevels: {
-            vocabulary: 1,
-            grammar: 1,
-            pronunciation: 1,
-            comprehension: 1
-          }
-        };
-
-        const [newPreferences] = await db
-          .insert(difficultyPreferences)
-          .values(defaultPreferences)
-          .returning();
-
-        return res.json(newPreferences);
-      }
-
-      res.json(preferences);
-    } catch (error) {
-      console.error("Error fetching user preferences:", error);
-      res.status(500).send("Failed to fetch user preferences");
+      logger.error('Error updating flashcard progress', {
+        userId,
+        flashcardId,
+        error: error instanceof Error ? error.message : String(error),
+        timestamp: new Date()
+      });
+      res.status(500).send("Failed to update progress");
     }
   });
 
