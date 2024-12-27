@@ -10,6 +10,7 @@ import LessonsPage from "./pages/LessonsPage";
 import LessonPage from "./pages/LessonPage";
 import GamesPage from "./pages/GamesPage";
 import LeaderboardPage from "./pages/LeaderboardPage";
+import LanguageExchangePage from "./pages/LanguageExchangePage";
 import { OnboardingTutorial } from "./components/OnboardingTutorial";
 import { ProgressCelebration } from "./components/ProgressCelebration";
 
@@ -37,6 +38,7 @@ function App() {
         <Route path="/lesson/:id" component={LessonPage} />
         <Route path="/games" component={GamesPage} />
         <Route path="/leaderboard" component={LeaderboardPage} />
+        <Route path="/language-exchange" component={LanguageExchangePage} />
       </Switch>
       <ProgressCelebration />
     </>
