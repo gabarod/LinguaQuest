@@ -8,18 +8,16 @@ import { eq, and, gte, lte, desc } from "drizzle-orm";
 import { format, subDays } from "date-fns";
 import { ChatService } from "./services/chatService";
 import { BuddyService } from "./services/buddyService";
+import { LanguageExchangeService } from "./services/languageExchangeService";
 import multer from "multer";
-import { Readable } from "stream";
-import { pipeline } from "stream/promises";
-import { BuddyRecommendationService } from "./services/buddyRecommendationService";
-import { PronunciationService } from "./services/pronunciationService";
-
-// Add logging for flashcard operations
-const logFlashcardOperation = (operation: string, details: any) => {
-  console.log(`[Flashcard ${operation}]:`, JSON.stringify(details, null, 2));
-};
 
 export function registerRoutes(app: Express): Server {
+  // Create HTTP server
+  const httpServer = createServer(app);
+
+  // Initialize WebSocket service for language exchange
+  new LanguageExchangeService(httpServer);
+
   setupAuth(app);
 
   // Configure multer for handling audio file uploads
@@ -977,7 +975,7 @@ export function registerRoutes(app: Express): Server {
             {
               role: "user",
               content: text
-            }
+                        }
           ],
           temperature: 0.2
         })
@@ -1122,6 +1120,5 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  const httpServer = createServer(app);
   return httpServer;
 }
