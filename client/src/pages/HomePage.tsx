@@ -5,6 +5,7 @@ import { Navigation } from "@/components/Navigation";
 import { LessonCard } from "@/components/LessonCard";
 import { ProgressBar } from "@/components/ProgressBar";
 import { ProgressChart } from "@/components/ProgressChart";
+import { ShareProgress } from "@/components/ShareProgress";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2 } from "lucide-react";
@@ -35,40 +36,45 @@ export default function HomePage() {
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : (
-          <section className="mb-8">
-            <h2 className="text-xl font-semibold mb-4">Your Progress</h2>
-            {progress && (
-              <ProgressChart
-                weeklyProgress={progress.weeklyProgress}
-                skillDistribution={progress.skillDistribution}
-              />
-            )}
-          </section>
+          <>
+            <section className="mb-8">
+              <h2 className="text-xl font-semibold mb-4">Your Progress</h2>
+              {progress && (
+                <div className="space-y-6">
+                  <ProgressChart
+                    weeklyProgress={progress.weeklyProgress}
+                    skillDistribution={progress.skillDistribution}
+                  />
+                  <ShareProgress />
+                </div>
+              )}
+            </section>
+
+            <section>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold">Continue Learning</h2>
+                <Button
+                  variant="ghost"
+                  onClick={() => setLocation("/lessons")}
+                >
+                  See All
+                </Button>
+              </div>
+
+              <ScrollArea className="h-[400px] w-full rounded-md border p-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {lessons?.map((lesson: Lesson) => (
+                    <LessonCard
+                      key={lesson.id}
+                      lesson={lesson}
+                      onClick={() => setLocation(`/lesson/${lesson.id}`)}
+                    />
+                  ))}
+                </div>
+              </ScrollArea>
+            </section>
+          </>
         )}
-
-        <section>
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold">Continue Learning</h2>
-            <Button
-              variant="ghost"
-              onClick={() => setLocation("/lessons")}
-            >
-              See All
-            </Button>
-          </div>
-
-          <ScrollArea className="h-[400px] w-full rounded-md border p-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {lessons?.map((lesson: Lesson) => (
-                <LessonCard
-                  key={lesson.id}
-                  lesson={lesson}
-                  onClick={() => setLocation(`/lesson/${lesson.id}`)}
-                />
-              ))}
-            </div>
-          </ScrollArea>
-        </section>
       </main>
     </div>
   );
