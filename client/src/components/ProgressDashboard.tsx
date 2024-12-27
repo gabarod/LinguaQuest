@@ -17,6 +17,7 @@ import { motion } from "framer-motion";
 import { HabitTracker } from "./HabitTracker";
 import { ProgressMap } from "./ProgressMap";
 import { format } from "date-fns";
+import { useMilestones } from "@/hooks/use-milestones";
 
 interface ProgressStats {
   weeklyProgress: {
@@ -36,12 +37,14 @@ interface ProgressStats {
 const COLORS = ["#0088FE", "#00C49F", "#FFBB28", "#FF8042"];
 
 export function ProgressDashboard() {
-  const { data: stats, isLoading } = useQuery<ProgressStats>({
+  const { data: stats, isLoading: statsLoading } = useQuery<ProgressStats>({
     queryKey: ["/api/progress/stats"],
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 
-  if (isLoading || !stats) {
+  const { milestones, isLoading: milestonesLoading } = useMilestones();
+
+  if (statsLoading || milestonesLoading || !stats) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="animate-pulse text-muted-foreground">Loading...</div>
@@ -49,12 +52,17 @@ export function ProgressDashboard() {
     );
   }
 
+  // Calculate progress as percentage of completed milestones
+  const completedMilestones = milestones?.filter(m => m.unlocked)?.length || 0;
+  const totalMilestones = milestones?.length || 1;
+  const progressPercentage = completedMilestones / totalMilestones;
+
   return (
     <div className="space-y-6">
       <Tabs defaultValue="overview" className="w-full">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="skills">Skills</TabsTrigger>
+          <TabsTrigger value="achievements">Achievements</TabsTrigger>
           <TabsTrigger value="habits">Habits</TabsTrigger>
         </TabsList>
 
@@ -119,7 +127,7 @@ export function ProgressDashboard() {
 
             <Card className="md:col-span-2">
               <CardHeader>
-                <CardTitle>Learning Path Progress</CardTitle>
+                <CardTitle>Achievement Progress</CardTitle>
               </CardHeader>
               <CardContent>
                 <motion.div
@@ -128,9 +136,12 @@ export function ProgressDashboard() {
                   transition={{ duration: 0.5 }}
                 >
                   <ProgressMap
-                    milestones={[]} // We'll implement this later
-                    currentProgress={0.5}
-                    onMilestoneClick={() => {}}
+                    milestones={milestones || []}
+                    currentProgress={progressPercentage}
+                    onMilestoneClick={(milestone) => {
+                      if (!milestone.unlocked) return;
+                      // TODO: Show milestone details in a modal
+                    }}
                   />
                 </motion.div>
               </CardContent>
@@ -138,9 +149,59 @@ export function ProgressDashboard() {
           </div>
         </TabsContent>
 
-        <TabsContent value="skills">
-          <div className="space-y-6">
-            {/* Additional skill-specific visualizations will go here */}
+        <TabsContent value="achievements">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {milestones?.map((milestone) => (
+              <Card
+                key={milestone.id}
+                className={`relative overflow-hidden transition-all duration-300 ${
+                  milestone.unlocked
+                    ? "bg-primary/5 border-primary/20"
+                    : "opacity-75"
+                }`}
+              >
+                <CardContent className="pt-6">
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className="text-center"
+                  >
+                    <div className="mb-4">
+                      {milestone.unlocked ? (
+                        <motion.div
+                          initial={{ scale: 0 }}
+                          animate={{ scale: 1 }}
+                          transition={{
+                            type: "spring",
+                            stiffness: 500,
+                            damping: 30,
+                          }}
+                          className="inline-block p-3 rounded-full bg-primary/10"
+                        >
+                          {/* Icon based on milestone type */}
+                          <div className="h-8 w-8 text-primary" />
+                        </motion.div>
+                      ) : (
+                        <div className="inline-block p-3 rounded-full bg-muted">
+                          <div className="h-8 w-8 text-muted-foreground" />
+                        </div>
+                      )}
+                    </div>
+                    <h3 className="font-semibold mb-2">{milestone.title}</h3>
+                    <p className="text-sm text-muted-foreground mb-4">
+                      {milestone.description}
+                    </p>
+                    {milestone.unlockedAt && (
+                      <p className="text-xs text-muted-foreground">
+                        Unlocked on{" "}
+                        {format(new Date(milestone.unlockedAt), "MMMM d, yyyy")}
+                      </p>
+                    )}
+                  </motion.div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
         </TabsContent>
 
