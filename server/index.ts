@@ -1,14 +1,11 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
-import { setupVite, serveStatic } from "./vite";
-import { logger, httpLogger } from "./services/loggingService";
+import { setupVite, serveStatic, log } from "./vite";
+import { setupAuth } from "./auth";
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
-
-// Add HTTP request logging middleware
-app.use(httpLogger);
 
 app.use((req, res, next) => {
   const start = Date.now();
@@ -33,7 +30,7 @@ app.use((req, res, next) => {
         logLine = logLine.slice(0, 79) + "…";
       }
 
-      logger.http(logLine);
+      log(logLine);
     }
   });
 
@@ -41,22 +38,29 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Setup authentication before registering routes
+  setupAuth(app);
+
   const server = registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
-    logger.error("Application Error", {
-      status,
-      message,
-      stack: err.stack,
-    });
+    log(`Error: ${status} - ${message}`);
+    if (err.stack) {
+      log(`Stack: ${err.stack}`);
+    }
 
-    res.status(status).json({ message });
-    throw err;
+    res.status(status).json({ 
+      success: false,
+      message 
+    });
   });
 
+  // importantly only setup vite in development and after
+  // setting up all the other routes so the catch-all route
+  // doesn't interfere with the other routes
   if (app.get("env") === "development") {
     await setupVite(app, server);
   } else {
@@ -65,6 +69,6 @@ app.use((req, res, next) => {
 
   const PORT = 5000;
   server.listen(PORT, "0.0.0.0", () => {
-    logger.info(`Server started on port ${PORT}`);
+    log(`Server running on port ${PORT}`);
   });
 })();

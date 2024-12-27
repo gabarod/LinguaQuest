@@ -23,11 +23,11 @@ export const supportedLanguages = [
 
 export type SupportedLanguage = typeof supportedLanguages[number];
 
-// Basic tables for authentication and language support
+// Users and Authentication
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").unique().notNull(),
-  email: text("email").unique(),  // Making email optional for the initial prototype
+  email: text("email").unique(),
   password: text("password").notNull(),
   avatar: text("avatar"),
   isEmailVerified: boolean("is_email_verified").default(false),
@@ -35,6 +35,25 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+// Schema validation for users
+export const insertUserSchema = createInsertSchema(users, {
+  username: z.string().min(3, "Username must be at least 3 characters").max(20, "Username must be less than 20 characters"),
+  password: z.string()
+    .min(8, "Password must be at least 8 characters")
+    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+    .regex(/[a-z]/, "Password must contain at least one lowercase letter")
+    .regex(/[0-9]/, "Password must contain at least one number")
+    .regex(/[^A-Za-z0-9]/, "Password must contain at least one special character"),
+  email: z.string().email("Invalid email address").optional(),
+});
+
+export const selectUserSchema = createSelectSchema(users);
+
+// User types
+export type SelectUser = typeof users.$inferSelect;
+export type InsertUser = typeof users.$inferInsert;
+export type User = Omit<SelectUser, "password">;
 
 // Buddy system tables
 export const buddyConnections = pgTable("buddy_connections", {
@@ -70,7 +89,6 @@ export const sessionFeedback = pgTable("session_feedback", {
   helpfulness: integer("helpfulness").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
-
 
 // Performance tracking and pronunciation specific tables
 export const performanceMetrics = pgTable("performance_metrics", {
@@ -246,19 +264,6 @@ export const aiRecommendations = pgTable("ai_recommendations", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Schema validation
-export const insertPronunciationAttemptSchema = createInsertSchema(pronunciationAttempts);
-export const selectPronunciationAttemptSchema = createSelectSchema(pronunciationAttempts);
-export const insertUserSchema = createInsertSchema(users);
-export const selectUserSchema = createSelectSchema(users);
-
-// Types
-export type SelectUser = typeof users.$inferSelect;
-export type InsertUser = typeof users.$inferInsert;
-export type User = Omit<SelectUser, "password">;
-export type InsertPronunciationAttempt = typeof pronunciationAttempts.$inferInsert;
-export type SelectPronunciationAttempt = typeof pronunciationAttempts.$inferSelect;
-
 // Daily challenges and gamification tables
 export const dailyChallenges = pgTable("daily_challenges", {
   id: serial("id").primaryKey(),
@@ -332,3 +337,6 @@ export const flashcardProgress = pgTable("flashcard_progress", {
   lastReviewedAt: timestamp("last_reviewed_at").defaultNow(),
   nextReviewAt: timestamp("next_review_at").notNull(),
 });
+
+export const insertPronunciationAttemptSchema = createInsertSchema(pronunciationAttempts);
+export const selectPronunciationAttemptSchema = createSelectSchema(pronunciationAttempts);

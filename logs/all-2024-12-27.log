@@ -4132,3 +4132,18 @@
 2024-12-27 14:34:58:3458 [35mhttp[39m: [35mGET /src/components/ui/textarea.tsx 304 1ms[39m
 2024-12-27 14:34:59:3459 [35mhttp[39m: [35mGET /api/user 401 1ms[39m
 2024-12-27 14:34:59:3459 [35mhttp[39m: [35mGET /api/user 401 in 1ms :: {"success":false,"message":"No autenticado"}[39m
+2024-12-27 14:36:24:3624 [31merror[39m: [31mApplication Error Missing credentials for "PLAIN"[39m
+2024-12-27 14:36:24:3624 [35mhttp[39m: [35mPOST /api/register 500 318ms[39m
+2024-12-27 14:36:24:3624 [35mhttp[39m: [35mPOST /api/register 500 in 319ms :: {"message":"Missing credentials for \"PLAIN\…[39m
+2024-12-27 14:36:32:3632 [35mhttp[39m: [35mPOST /api/register 400 28ms[39m
+2024-12-27 14:36:32:3632 [35mhttp[39m: [35mPOST /api/register 400 in 28ms :: {"success":false,"message":"El nombre de usua…[39m
+2024-12-27 14:36:50:3650 [35mhttp[39m: [35mPOST /api/login 401 119ms[39m
+2024-12-27 14:36:50:3650 [35mhttp[39m: [35mPOST /api/login 401 in 119ms :: {"success":false,"message":"Usuario o contraseñ…[39m
+2024-12-27 14:37:02:372 [35mhttp[39m: [35mPOST /api/login 401 96ms[39m
+2024-12-27 14:37:02:372 [35mhttp[39m: [35mPOST /api/login 401 in 97ms :: {"success":false,"message":"Usuario o contraseña…[39m
+2024-12-27 14:37:08:378 [35mhttp[39m: [35mPOST /api/login 401 23ms[39m
+2024-12-27 14:37:08:378 [35mhttp[39m: [35mPOST /api/login 401 in 23ms :: {"success":false,"message":"Usuario o contraseña…[39m
+2024-12-27 14:37:15:3715 [35mhttp[39m: [35mPOST /api/login 401 22ms[39m
+2024-12-27 14:37:15:3715 [35mhttp[39m: [35mPOST /api/login 401 in 23ms :: {"success":false,"message":"Usuario o contraseña…[39m
+2024-12-27 14:37:21:3721 [35mhttp[39m: [35mPOST /api/login 200 83ms[39m
+2024-12-27 14:37:21:3721 [35mhttp[39m: [35mPOST /api/login 200 in 84ms :: {"success":true,"message":"Inicio de sesión exit…[39m
