@@ -1,5 +1,6 @@
 import { performanceMetrics } from "@db/schema";
 import { db } from "@db";
+import { decimal } from "drizzle-orm/pg-core";
 
 interface PronunciationAnalysis {
   score: number;
@@ -76,12 +77,13 @@ export class PronunciationService {
     exerciseId: number,
     score: number
   ) {
-    await db.insert(performanceMetrics).values({
+    await db.insert(performanceMetrics).values([{
       userId,
       exerciseId,
-      accuracy: score,
+      accuracy: decimal(score),
       responseTime: 0,
       attemptCount: 1,
-    });
+      timestamp: new Date()
+    }]);
   }
 }

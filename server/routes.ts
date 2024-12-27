@@ -9,6 +9,7 @@ import { format, subDays } from "date-fns";
 import { ChatService } from "./services/chatService";
 import { BuddyService } from "./services/buddyService";
 import { LanguageExchangeService } from "./services/languageExchangeService";
+import { PronunciationService } from "./services/pronunciationService";
 import multer from "multer";
 
 export function registerRoutes(app: Express): Server {
