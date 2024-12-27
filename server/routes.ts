@@ -10,7 +10,6 @@ import { logger } from './services/loggingService';
 import { subDays, startOfDay, format } from 'date-fns';
 
 export function registerRoutes(app: Express): Server {
-  // Create HTTP server
   const httpServer = createServer(app);
 
   setupAuth(app);
@@ -67,111 +66,6 @@ export function registerRoutes(app: Express): Server {
     } catch (error) {
       console.error("Error setting up initial lessons:", error);
       res.status(500).send("Failed to set up initial lessons");
-    }
-  });
-
-  // Get all lessons
-  app.get("/api/lessons", async (req, res) => {
-    const userId = req.user?.id;
-    if (!userId) {
-      return res.status(401).send("Not authenticated");
-    }
-
-    try {
-      const allLessons = await db.query.lessons.findMany({
-        with: {
-          progress: {
-            where: eq(userProgress.userId, userId),
-          },
-        },
-      });
-
-      res.json(allLessons);
-    } catch (error) {
-      logger.error("Error fetching lessons:", error);
-      res.status(500).send("Failed to fetch lessons");
-    }
-  });
-
-  // Get specific lesson
-  app.get("/api/lessons/:id", async (req, res) => {
-    const userId = req.user?.id;
-    if (!userId) {
-      return res.status(401).send("Not authenticated");
-    }
-
-    try {
-      const lesson = await db.query.lessons.findFirst({
-        where: eq(lessons.id, parseInt(req.params.id)),
-      });
-
-      if (!lesson) {
-        return res.status(404).send("Lesson not found");
-      }
-
-      res.json(lesson);
-    } catch (error) {
-      logger.error("Error fetching lesson:", error);
-      res.status(500).send("Failed to fetch lesson");
-    }
-  });
-
-  // Complete a lesson
-  app.post("/api/lessons/:id/complete", async (req, res) => {
-    const userId = req.user?.id;
-    if (!userId) {
-      return res.status(401).send("Not authenticated");
-    }
-
-    const lessonId = parseInt(req.params.id);
-
-    try {
-      await db.transaction(async (tx) => {
-        // Update or create progress
-        await tx
-          .insert(userProgress)
-          .values({
-            userId,
-            lessonId,
-            completed: true,
-            completedAt: new Date(),
-          })
-          .onConflictDoUpdate({
-            target: [userProgress.userId, userProgress.lessonId],
-            set: { completed: true, completedAt: new Date() },
-          });
-
-        // Update user stats
-        const lesson = await tx.query.lessons.findFirst({
-          where: eq(lessons.id, lessonId),
-        });
-
-        if (lesson) {
-          await tx
-            .insert(userStats)
-            .values({
-              userId,
-              lessonsCompleted: 1,
-              totalPoints: lesson.points,
-              streak: 1,
-              lastActivity: new Date(),
-            })
-            .onConflictDoUpdate({
-              target: [userStats.userId],
-              set: {
-                lessonsCompleted: sql`${userStats.lessonsCompleted} + 1`,
-                totalPoints: sql`${userStats.totalPoints} + ${lesson.points}`,
-                streak: sql`${userStats.streak} + 1`,
-                lastActivity: new Date(),
-              },
-            });
-        }
-      });
-
-      res.json({ success: true });
-    } catch (error) {
-      logger.error("Error completing lesson:", error);
-      res.status(500).send("Failed to complete lesson");
     }
   });
 
@@ -245,8 +139,8 @@ export function registerRoutes(app: Express): Server {
       res.json({
         weeklyProgress: weeklyProgress.map(wp => ({
           day: format(new Date(wp.day), 'EEE'),
-          points: wp.points,
-          exercises: wp.exercises,
+          points: wp.points || 0,
+          exercises: wp.exercises || 0,
         })),
         skillDistribution,
         totalPoints: stats?.totalPoints || 0,
@@ -256,31 +150,6 @@ export function registerRoutes(app: Express): Server {
     } catch (error) {
       logger.error("Error fetching detailed progress:", error);
       res.status(500).send("Failed to fetch detailed progress");
-    }
-  });
-
-  // Get user stats for habit tracking
-  app.get("/api/leaderboard/user/stats", async (req, res) => {
-    const userId = req.user?.id;
-    if (!userId) {
-      return res.status(401).send("Not authenticated");
-    }
-
-    try {
-      const stats = await db.query.userStats.findFirst({
-        where: eq(userStats.userId, userId),
-      });
-
-      res.json({
-        streak: stats?.streak || 0,
-        weeklyXP: stats?.weeklyXP || 0,
-        monthlyXP: stats?.monthlyXP || 0,
-        completedChallenges: stats?.lessonsCompleted || 0,
-        lastActivity: stats?.lastActivity || new Date(),
-      });
-    } catch (error) {
-      logger.error("Error fetching user stats:", error);
-      res.status(500).send("Failed to fetch user stats");
     }
   });
 
@@ -321,6 +190,31 @@ export function registerRoutes(app: Express): Server {
     } catch (error) {
       logger.error("Error fetching daily challenge:", error);
       res.status(500).send("Failed to fetch daily challenge");
+    }
+  });
+
+  // Get user stats for habit tracking
+  app.get("/api/leaderboard/user/stats", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    try {
+      const stats = await db.query.userStats.findFirst({
+        where: eq(userStats.userId, userId),
+      });
+
+      res.json({
+        streak: stats?.streak || 0,
+        weeklyXP: stats?.weeklyXP || 0,
+        monthlyXP: stats?.monthlyXP || 0,
+        completedChallenges: stats?.lessonsCompleted || 0,
+        lastActivity: stats?.lastActivity || new Date(),
+      });
+    } catch (error) {
+      logger.error("Error fetching user stats:", error);
+      res.status(500).send("Failed to fetch user stats");
     }
   });
 

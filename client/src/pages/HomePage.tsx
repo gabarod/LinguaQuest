@@ -26,7 +26,7 @@ export default function HomePage() {
       <Navigation />
       <main className="container mx-auto p-4 pb-24">
         <section className="mb-8">
-          <h1 className="text-2xl font-bold mb-4">¡Bienvenido de nuevo, {user?.username}!</h1>
+          <h1 className="text-2xl font-bold mb-4">Welcome back, {user?.username}!</h1>
           <ProgressBar
             completed={progress?.lessonsCompleted || 0}
             total={lessons?.length || 0}
@@ -42,18 +42,18 @@ export default function HomePage() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 space-y-8">
               <section>
-                <h2 className="text-xl font-semibold mb-4">Desafío Diario</h2>
+                <h2 className="text-xl font-semibold mb-4">Daily Challenge</h2>
                 <DailyChallenge />
               </section>
 
               <section>
                 <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-xl font-semibold">Continuar Aprendiendo</h2>
+                  <h2 className="text-xl font-semibold">Continue Learning</h2>
                   <Button
                     variant="ghost"
                     onClick={() => setLocation("/lessons")}
                   >
-                    Ver Todo
+                    View All
                   </Button>
                 </div>
 
@@ -73,17 +73,17 @@ export default function HomePage() {
 
             <div className="space-y-8">
               <section>
-                <h2 className="text-xl font-semibold mb-4">Proficiencia del Idioma</h2>
+                <h2 className="text-xl font-semibold mb-4">Language Proficiency</h2>
                 <LanguageProficiencyChart />
               </section>
 
               <section>
-                <h2 className="text-xl font-semibold mb-4">Seguimiento de Hábitos</h2>
+                <h2 className="text-xl font-semibold mb-4">Habit Tracker</h2>
                 <HabitTracker />
               </section>
 
               <section>
-                <h2 className="text-xl font-semibold mb-4">Tu Progreso</h2>
+                <h2 className="text-xl font-semibold mb-4">Your Progress</h2>
                 {progress && (
                   <div className="space-y-6">
                     <ProgressChart
