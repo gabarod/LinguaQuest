@@ -13,6 +13,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2 } from "lucide-react";
 import { useLocation } from "wouter";
 import type { Lesson } from "@/types";
+import { LanguageProficiencyChart } from "@/components/LanguageProficiencyChart";
 
 export default function HomePage() {
   const { user } = useUser();
@@ -71,6 +72,11 @@ export default function HomePage() {
             </div>
 
             <div className="space-y-8">
+              <section>
+                <h2 className="text-xl font-semibold mb-4">Proficiencia del Idioma</h2>
+                <LanguageProficiencyChart />
+              </section>
+
               <section>
                 <h2 className="text-xl font-semibold mb-4">Seguimiento de Hábitos</h2>
                 <HabitTracker />
