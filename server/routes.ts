@@ -17,6 +17,9 @@ interface ChatMessage {
   timestamp: Date;
 }
 
+// Define supported languages (this needs to be defined elsewhere in your project)
+const supportedLanguages = ["english", "spanish", "french"]; // Example
+
 export function registerRoutes(app: Express): Server {
   const httpServer = createServer(app);
 
@@ -28,55 +31,29 @@ export function registerRoutes(app: Express): Server {
   // Get initial lessons
   app.get("/api/lessons/initial", async (req, res) => {
     try {
-      // Insert initial lessons if they don't exist
-      const initialLessons = [
-        {
-          title: "Basic Greetings",
-          description: "Learn essential greetings and introductions in English",
-          type: "conversation",
-          level: "beginner",
-          language: "english",
-          points: 100,
-          duration: 15,
-          difficulty: 1,
-        },
-        {
-          title: "Common Phrases",
-          description: "Master everyday expressions and useful phrases",
-          type: "vocabulary",
-          level: "beginner",
-          language: "english",
-          points: 150,
-          duration: 20,
-          difficulty: 1,
-        },
-        {
-          title: "Present Tense",
-          description: "Understanding and using the present tense in English",
-          type: "grammar",
-          level: "beginner",
-          language: "english",
-          points: 200,
-          duration: 25,
-          difficulty: 1,
-        },
-      ];
-
-      for (const lesson of initialLessons) {
-        await db
-          .insert(lessons)
-          .values(lesson)
-          .onConflictDoNothing();
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).send("Not authenticated");
       }
 
+      const user = await db.query.users.findFirst({
+        where: eq(users.id, userId),
+      });
+
+      if (!user) {
+        return res.status(404).send("User not found");
+      }
+
+      // Filter lessons by user's target language
       const allLessons = await db.query.lessons.findMany({
+        where: eq(lessons.language, user.targetLanguage),
         orderBy: [desc(lessons.points)],
       });
 
       res.json(allLessons);
     } catch (error) {
-      logger.error("Error setting up initial lessons:", error);
-      res.status(500).send("Failed to set up initial lessons");
+      logger.error("Error fetching lessons:", error);
+      res.status(500).send("Failed to fetch lessons");
     }
   });
 
@@ -284,16 +261,28 @@ export function registerRoutes(app: Express): Server {
     }
 
     try {
+      const user = await db.query.users.findFirst({
+        where: eq(users.id, userId),
+      });
+
+      if (!user) {
+        return res.status(404).send("User not found");
+      }
+
       const stats = await db.query.userStats.findFirst({
-        where: eq(userStats.userId, userId),
+        where: and(
+          eq(userStats.userId, userId),
+          eq(userStats.language, user.targetLanguage)
+        ),
       });
 
       if (!stats) {
-        // Create initial stats for new user
+        // Create initial stats for new user and language
         const [newStats] = await db
           .insert(userStats)
           .values({
             userId,
+            language: user.targetLanguage,
             lessonsCompleted: 0,
             totalPoints: 0,
             streak: 0,
@@ -388,6 +377,56 @@ export function registerRoutes(app: Express): Server {
     } catch (error) {
       logger.error("Error fetching detailed progress:", error);
       res.status(500).send("Failed to fetch detailed progress");
+    }
+  });
+
+  // Add this route after the existing /api/user endpoint
+  app.post("/api/user/language", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    try {
+      const { language } = req.body;
+      if (!supportedLanguages.includes(language)) {
+        return res.status(400).send("Unsupported language");
+      }
+
+      // Update user's target language
+      const [updatedUser] = await db
+        .update(users)
+        .set({ targetLanguage: language })
+        .where(eq(users.id, userId))
+        .returning();
+
+      // Ensure user stats exist for this language
+      const existingStats = await db.query.userStats.findFirst({
+        where: and(
+          eq(userStats.userId, userId),
+          eq(userStats.language, language)
+        ),
+      });
+
+      if (!existingStats) {
+        await db.insert(userStats).values({
+          userId,
+          language,
+          lessonsCompleted: 0,
+          totalPoints: 0,
+          streak: 0,
+          lastActivity: new Date(),
+        });
+      }
+
+      res.json({
+        success: true,
+        message: "Language updated successfully",
+        user: updatedUser,
+      });
+    } catch (error) {
+      logger.error("Error updating user language:", error);
+      res.status(500).send("Failed to update language");
     }
   });
 

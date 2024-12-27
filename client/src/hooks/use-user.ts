@@ -12,10 +12,14 @@ type LoginData = {
   password: string;
 };
 
+type UpdateLanguageData = {
+  language: string;
+};
+
 async function handleRequest(
   url: string,
   method: string,
-  body?: LoginData | InsertUser
+  body?: LoginData | InsertUser | UpdateLanguageData
 ): Promise<RequestResult> {
   try {
     const response = await fetch(url, {
@@ -110,6 +114,18 @@ export function useUser() {
     },
   });
 
+  const updateLanguageMutation = useMutation<RequestResult, Error, string>({
+    mutationFn: (language) => handleRequest('/api/user/language', 'POST', { language }),
+    onSuccess: (data) => {
+      if (data.success && data.user) {
+        queryClient.setQueryData(['user'], data.user);
+        // Invalidate queries that depend on the selected language
+        queryClient.invalidateQueries({ queryKey: ['/api/lessons'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/progress'] });
+      }
+    },
+  });
+
   return {
     user,
     isLoading,
@@ -117,5 +133,6 @@ export function useUser() {
     login: loginMutation.mutateAsync,
     logout: logoutMutation.mutateAsync,
     register: registerMutation.mutateAsync,
+    updateUserLanguage: updateLanguageMutation.mutateAsync,
   };
 }

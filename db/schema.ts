@@ -6,6 +6,7 @@ import {
   timestamp,
   integer,
   boolean,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
@@ -73,6 +74,7 @@ export const userProgress = pgTable("user_progress", {
 export const userStats = pgTable("user_stats", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id).notNull(),
+  language: text("language").notNull().default('english'),
   lessonsCompleted: integer("lessons_completed").default(0),
   totalPoints: integer("total_points").default(0),
   weeklyXP: integer("weekly_xp").default(0),
@@ -83,7 +85,13 @@ export const userStats = pgTable("user_stats", {
   proficiencyLevel: text("proficiency_level").default('beginner'),
 });
 
-// Daily challenges and achievements
+export const userStatsLanguageIdx = pgTable("user_stats_language_idx", {
+  userId: integer("user_id").references(() => users.id),
+  language: text("language"),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.userId, table.language] }),
+}));
+
 export const dailyChallenges = pgTable("daily_challenges", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id).notNull(),
@@ -98,10 +106,7 @@ export const dailyChallenges = pgTable("daily_challenges", {
 // Relations
 export const lessonsRelations = relations(lessons, ({ many }) => ({
   exercises: many(exercises),
-  progress: many(userProgress, {
-    fields: [lessons.id],
-    references: [userProgress.lessonId],
-  }),
+  progress: many(userProgress),
 }));
 
 export const userProgressRelations = relations(userProgress, ({ one }) => ({
