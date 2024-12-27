@@ -6,7 +6,7 @@ import {
   users,
   type User 
 } from "@db/schema";
-import { eq, and, or, desc } from "drizzle-orm";
+import { eq, and, or, desc, sql } from "drizzle-orm";
 
 export class BuddyService {
   static async findPotentialBuddies(userId: number, language: string) {
@@ -37,8 +37,8 @@ export class BuddyService {
       )
       .where(
         and(
-          users.id !== userId,
-          !buddyIds.includes(users.id)
+          sql`${users.id} != ${userId}`,
+          sql`${users.id} NOT IN (${buddyIds.length ? buddyIds.join(',') : 'NULL'})`
         )
       )
       .limit(10);
@@ -171,8 +171,8 @@ export class BuddyService {
     const [stats] = await db
       .select({
         totalSessions: sql<number>`count(DISTINCT ${practiceSessions.id})`,
-        avgRating: sql<number>`avg(${sessionFeedback.rating})`,
-        avgHelpfulness: sql<number>`avg(${sessionFeedback.helpfulness})`,
+        avgRating: sql<number>`COALESCE(avg(${sessionFeedback.rating}), 0)`,
+        avgHelpfulness: sql<number>`COALESCE(avg(${sessionFeedback.helpfulness}), 0)`,
       })
       .from(practiceSessions)
       .leftJoin(

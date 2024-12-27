@@ -1,11 +1,17 @@
 import { db } from "@db";
 import { users, buddyConnections, performanceMetrics, difficultyPreferences, sessionFeedback } from "@db/schema";
-import { eq, and, avg, desc, sql } from "drizzle-orm";
+import { eq, and, avg, desc, sql, or } from "drizzle-orm";
 
 interface BuddyScore {
   userId: number;
   score: number;
   matchReason: string[];
+  compatibility: {
+    skillLevel: number;
+    schedule: number;
+    feedback: number;
+    languageMatch: number;
+  };
 }
 
 export class BuddyRecommendationService {
@@ -13,18 +19,28 @@ export class BuddyRecommendationService {
     try {
       // Get user's preferences and stats
       const [userPrefs] = await db
-        .select()
-        .from(difficultyPreferences)
-        .where(eq(difficultyPreferences.userId, userId));
+        .select({
+          id: users.id,
+          skillLevels: difficultyPreferences.skillLevels,
+          preferredLevel: difficultyPreferences.preferredLevel
+        })
+        .from(users)
+        .leftJoin(
+          difficultyPreferences,
+          eq(difficultyPreferences.userId, users.id)
+        )
+        .where(eq(users.id, userId));
 
-      // Calculate compatibility scores for potential buddies
+      // Get potential buddies with their stats and preferences
       const potentialBuddies = await db
         .select({
           id: users.id,
           username: users.username,
           skillLevels: difficultyPreferences.skillLevels,
-          averageRating: sql<number>`avg(${sessionFeedback.rating})`,
+          preferredLevel: difficultyPreferences.preferredLevel,
+          rating: sql<number>`COALESCE(avg(${sessionFeedback.rating}), 0)`,
           successfulSessions: sql<number>`count(${sessionFeedback.id})`,
+          lastActive: sql<Date>`MAX(${performanceMetrics.timestamp})`
         })
         .from(users)
         .leftJoin(
@@ -34,6 +50,10 @@ export class BuddyRecommendationService {
         .leftJoin(
           sessionFeedback,
           eq(sessionFeedback.receiverId, users.id)
+        )
+        .leftJoin(
+          performanceMetrics,
+          eq(performanceMetrics.userId, users.id)
         )
         .where(
           and(
@@ -45,22 +65,25 @@ export class BuddyRecommendationService {
             )`
           )
         )
-        .groupBy(users.id, users.username, difficultyPreferences.skillLevels);
+        .groupBy(users.id, users.username, difficultyPreferences.skillLevels, difficultyPreferences.preferredLevel);
 
       // Score each potential buddy
       const scoredBuddies: BuddyScore[] = await Promise.all(
         potentialBuddies.map(async (buddy) => {
-          const score = await this.calculateCompatibilityScore(
-            userId,
-            buddy.id,
+          const compatibilityScores = await this.calculateCompatibilityScores(
             userPrefs,
             buddy,
             targetLanguage
           );
+
+          const totalScore = this.calculateTotalScore(compatibilityScores);
+          const matchReasons = this.generateMatchReasons(compatibilityScores, buddy);
+
           return {
             userId: buddy.id,
-            score: score.total,
-            matchReason: score.reasons,
+            score: totalScore,
+            matchReason: matchReasons,
+            compatibility: compatibilityScores
           };
         })
       );
@@ -69,91 +92,138 @@ export class BuddyRecommendationService {
       return scoredBuddies
         .sort((a, b) => b.score - a.score)
         .slice(0, 10);
+
     } catch (error) {
       console.error("Error in buddy recommendations:", error);
       throw error;
     }
   }
 
-  private static async calculateCompatibilityScore(
-    userId: number,
-    buddyId: number,
+  private static async calculateCompatibilityScores(
     userPrefs: any,
     buddy: any,
     targetLanguage: string
   ) {
     const scores = {
       skillLevel: 0,
-      activityPattern: 0,
-      feedbackScore: 0,
-      languageMatch: 0,
+      schedule: 0,
+      feedback: 0,
+      languageMatch: 0
     };
-    const reasons: string[] = [];
 
     // Calculate skill level compatibility (0-100)
     if (userPrefs?.skillLevels && buddy.skillLevels) {
-      const skillDiff = Object.keys(userPrefs.skillLevels).reduce(
-        (acc, skill) => acc + Math.abs(userPrefs.skillLevels[skill] - buddy.skillLevels[skill]),
+      const skillDiff = Object.entries(userPrefs.skillLevels).reduce(
+        (acc, [skill, level]) => {
+          const buddyLevel = buddy.skillLevels[skill] || 0;
+          // Closer skill levels get higher scores
+          return acc + (100 - Math.abs(level - buddyLevel) * 20);
+        },
         0
-      );
-      scores.skillLevel = Math.max(0, 100 - (skillDiff * 20));
-      if (scores.skillLevel > 70) {
-        reasons.push("Similar skill levels");
-      }
+      ) / Object.keys(userPrefs.skillLevels).length;
+
+      scores.skillLevel = skillDiff;
     }
 
-    // Calculate activity pattern match (0-100)
-    const activityMatch = await this.calculateActivityPatternMatch(userId, buddyId);
-    scores.activityPattern = activityMatch;
-    if (activityMatch > 70) {
-      reasons.push("Compatible schedules");
-    }
+    // Calculate schedule compatibility (0-100)
+    const scheduleMatch = await this.calculateScheduleCompatibility(
+      userPrefs.id,
+      buddy.id
+    );
+    scores.schedule = scheduleMatch;
 
     // Calculate feedback score (0-100)
-    if (buddy.averageRating) {
-      scores.feedbackScore = Math.min(100, buddy.averageRating * 20);
-      if (scores.feedbackScore > 80) {
-        reasons.push("Highly rated by other learners");
-      }
+    if (buddy.rating) {
+      scores.feedback = Math.min(100, buddy.rating * 20);
     }
 
-    // Language match bonus (0 or 100)
-    const languageMatch = await this.checkLanguageCompatibility(userId, buddyId, targetLanguage);
+    // Language match bonus (0-100)
+    const languageMatch = await this.checkLanguageCompatibility(
+      userPrefs.id,
+      buddy.id,
+      targetLanguage
+    );
     scores.languageMatch = languageMatch ? 100 : 0;
-    if (languageMatch) {
+
+    return scores;
+  }
+
+  private static calculateTotalScore(scores: {
+    skillLevel: number;
+    schedule: number;
+    feedback: number;
+    languageMatch: number;
+  }) {
+    // Weighted average of all scores
+    return (
+      scores.skillLevel * 0.3 +
+      scores.schedule * 0.2 +
+      scores.feedback * 0.2 +
+      scores.languageMatch * 0.3
+    );
+  }
+
+  private static generateMatchReasons(
+    scores: {
+      skillLevel: number;
+      schedule: number;
+      feedback: number;
+      languageMatch: number;
+    },
+    buddy: any
+  ): string[] {
+    const reasons: string[] = [];
+
+    if (scores.skillLevel > 80) {
+      reasons.push("Very similar skill levels");
+    } else if (scores.skillLevel > 60) {
+      reasons.push("Compatible skill levels");
+    }
+
+    if (scores.schedule > 80) {
+      reasons.push("Highly compatible schedules");
+    } else if (scores.schedule > 60) {
+      reasons.push("Similar active hours");
+    }
+
+    if (scores.feedback > 80) {
+      reasons.push("Excellent peer ratings");
+    } else if (scores.feedback > 60) {
+      reasons.push("Good peer feedback");
+    }
+
+    if (scores.languageMatch === 100) {
       reasons.push("Perfect language match");
     }
 
-    // Calculate weighted total
-    const total = (
-      scores.skillLevel * 0.3 +
-      scores.activityPattern * 0.2 +
-      scores.feedbackScore * 0.2 +
-      scores.languageMatch * 0.3
-    );
+    if (buddy.successfulSessions > 10) {
+      reasons.push("Experienced language partner");
+    }
 
-    return {
-      total,
-      reasons,
-    };
+    return reasons;
   }
 
-  private static async calculateActivityPatternMatch(userId: number, buddyId: number) {
-    // Get active hours patterns for both users from performance metrics
-    const [userPattern, buddyPattern] = await Promise.all([
-      this.getUserActivityPattern(userId),
-      this.getUserActivityPattern(buddyId),
+  private static async calculateScheduleCompatibility(
+    userId1: number,
+    userId2: number
+  ) {
+    const [pattern1, pattern2] = await Promise.all([
+      this.getUserActivityPattern(userId1),
+      this.getUserActivityPattern(userId2)
     ]);
 
-    // Calculate overlap in active hours (simplified)
-    const overlap = userPattern.filter(hour => buddyPattern.includes(hour)).length;
-    return (overlap / Math.max(userPattern.length, 1)) * 100;
+    // Calculate overlap in active hours
+    const overlap = pattern1.filter(hour => pattern2.includes(hour)).length;
+    const maxHours = Math.max(pattern1.length, pattern2.length) || 1;
+
+    // More shared active hours = higher compatibility
+    return (overlap / maxHours) * 100;
   }
 
   private static async getUserActivityPattern(userId: number) {
     const activities = await db
       .select({
-        hour: sql<number>`EXTRACT(HOUR FROM ${performanceMetrics.timestamp})`,
+        hour: sql<number>`EXTRACT(HOUR FROM ${performanceMetrics.timestamp})`
       })
       .from(performanceMetrics)
       .where(eq(performanceMetrics.userId, userId))
@@ -163,13 +233,27 @@ export class BuddyRecommendationService {
   }
 
   private static async checkLanguageCompatibility(
-    userId: number,
-    buddyId: number,
+    userId1: number,
+    userId2: number,
     targetLanguage: string
   ) {
-    // Check if buddy is native in user's target language
-    // This would require additional user profile data
-    // For now, return true if they're learning complementary languages
-    return true; // Simplified for now
+    // Check if users have complementary language interests
+    const connections = await db
+      .select()
+      .from(buddyConnections)
+      .where(
+        or(
+          and(
+            eq(buddyConnections.userId, userId1),
+            eq(buddyConnections.languageInterest, targetLanguage)
+          ),
+          and(
+            eq(buddyConnections.userId, userId2),
+            eq(buddyConnections.languageInterest, targetLanguage)
+          )
+        )
+      );
+
+    return connections.length > 0;
   }
 }
