@@ -10,18 +10,26 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 
 const authSchema = z.object({
-  username: z.string().min(3).max(20),
-  password: z.string().min(6),
+  username: z.string().min(3, "Username must be at least 3 characters").max(20, "Username must be less than 20 characters"),
+  email: z.string().email("Invalid email address"),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters")
+    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+    .regex(/[a-z]/, "Password must contain at least one lowercase letter")
+    .regex(/[0-9]/, "Password must contain at least one number")
+    .regex(/[^A-Za-z0-9]/, "Password must contain at least one special character"),
 });
 
 export default function AuthPage() {
   const { login, register } = useUser();
   const { toast } = useToast();
-  
+
   const form = useForm({
     resolver: zodResolver(authSchema),
     defaultValues: {
       username: "",
+      email: "",
       password: "",
     },
   });
@@ -60,15 +68,25 @@ export default function AuthPage() {
             <TabsContent value="login">
               <Form {...form}>
                 <form onSubmit={form.handleSubmit((data) => onSubmit(data, true))} className="space-y-4">
-                  <Input
-                    placeholder="Username"
-                    {...form.register("username")}
-                  />
-                  <Input
-                    type="password"
-                    placeholder="Password"
-                    {...form.register("password")}
-                  />
+                  <div className="space-y-2">
+                    <Input
+                      placeholder="Username or Email"
+                      {...form.register("username")}
+                    />
+                    {form.formState.errors.username && (
+                      <p className="text-sm text-red-500">{form.formState.errors.username.message}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Input
+                      type="password"
+                      placeholder="Password"
+                      {...form.register("password")}
+                    />
+                    {form.formState.errors.password && (
+                      <p className="text-sm text-red-500">{form.formState.errors.password.message}</p>
+                    )}
+                  </div>
                   <Button type="submit" className="w-full">
                     Login
                   </Button>
@@ -78,15 +96,35 @@ export default function AuthPage() {
             <TabsContent value="register">
               <Form {...form}>
                 <form onSubmit={form.handleSubmit((data) => onSubmit(data, false))} className="space-y-4">
-                  <Input
-                    placeholder="Username"
-                    {...form.register("username")}
-                  />
-                  <Input
-                    type="password"
-                    placeholder="Password"
-                    {...form.register("password")}
-                  />
+                  <div className="space-y-2">
+                    <Input
+                      placeholder="Username"
+                      {...form.register("username")}
+                    />
+                    {form.formState.errors.username && (
+                      <p className="text-sm text-red-500">{form.formState.errors.username.message}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Input
+                      type="email"
+                      placeholder="Email"
+                      {...form.register("email")}
+                    />
+                    {form.formState.errors.email && (
+                      <p className="text-sm text-red-500">{form.formState.errors.email.message}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Input
+                      type="password"
+                      placeholder="Password"
+                      {...form.register("password")}
+                    />
+                    {form.formState.errors.password && (
+                      <p className="text-sm text-red-500">{form.formState.errors.password.message}</p>
+                    )}
+                  </div>
                   <Button type="submit" className="w-full">
                     Register
                   </Button>
