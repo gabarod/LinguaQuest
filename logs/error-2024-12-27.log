@@ -30,3 +30,10 @@
 2024-12-27 16:24:07:247 [31merror[39m: [31mError fetching progress: column "language_proficiency" does not exist[39m
 2024-12-27 16:24:07:247 [31merror[39m: [31mError fetching detailed progress: column "language_proficiency" does not exist[39m
 2024-12-27 16:24:08:248 [31merror[39m: [31mError fetching user stats: column "language_proficiency" does not exist[39m
+2024-12-27 23:25:00:250 [31merror[39m: [31mError fetching progress: column "lesson_id" does not exist[39m
+2024-12-27 23:25:00:250 [31merror[39m: [31mError fetching detailed progress: column language_progress.lesson_id does not exist[39m
+2024-12-27 23:25:01:251 [31merror[39m: [31mError fetching user stats: column "lesson_id" does not exist[39m
+2024-12-27 23:25:19:2519 [31merror[39m: [31mError fetching user stats: column "lesson_id" does not exist[39m
+2024-12-27 23:25:26:2526 [31merror[39m: [31mError fetching detailed progress: column language_progress.lesson_id does not exist[39m
+2024-12-27 23:25:26:2526 [31merror[39m: [31mError fetching progress: column "lesson_id" does not exist[39m
+2024-12-27 23:25:27:2527 [31merror[39m: [31mError fetching user stats: column "lesson_id" does not exist[39m
