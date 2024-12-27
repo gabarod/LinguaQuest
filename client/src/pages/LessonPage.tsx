@@ -9,25 +9,64 @@ import { ShareAchievement } from "@/components/ShareAchievement";
 import { type Exercise } from "@/types";
 import { useToast } from "@/hooks/use-toast";
 
+interface PerformanceMetric {
+  startTime: number;
+  attempts: number;
+}
+
 export default function LessonPage() {
   const { id } = useParams<{ id: string }>();
   const { lesson, exercises, completeLesson } = useLesson(Number(id));
   const [currentExercise, setCurrentExercise] = useState(0);
   const [progress, setProgress] = useState(0);
   const [showShareDialog, setShowShareDialog] = useState(false);
+  const [performanceMetric, setPerformanceMetric] = useState<PerformanceMetric>({
+    startTime: Date.now(),
+    attempts: 0,
+  });
   const { toast } = useToast();
 
   useEffect(() => {
     if (exercises) {
       setProgress((currentExercise / exercises.length) * 100);
+      // Reset performance metric for new exercise
+      setPerformanceMetric({
+        startTime: Date.now(),
+        attempts: 0,
+      });
     }
   }, [currentExercise, exercises]);
+
+  const submitPerformanceMetric = async (correct: boolean) => {
+    const responseTime = Date.now() - performanceMetric.startTime;
+    const accuracy = correct ? 1.0 : 0.0;
+
+    try {
+      await fetch(`/api/exercises/${exercises?.[currentExercise].id}/performance`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accuracy,
+          responseTime,
+          attemptCount: performanceMetric.attempts + 1,
+        }),
+      });
+    } catch (error) {
+      console.error("Failed to submit performance metric:", error);
+    }
+  };
 
   const handleAnswer = async (answer: string) => {
     const exercise = exercises?.[currentExercise];
     if (!exercise) return;
 
+    setPerformanceMetric(prev => ({
+      ...prev,
+      attempts: prev.attempts + 1,
+    }));
+
     if (answer === exercise.correctAnswer) {
+      await submitPerformanceMetric(true);
       toast({
         title: "Correct!",
         description: "Great job!",
@@ -41,6 +80,7 @@ export default function LessonPage() {
         setCurrentExercise(prev => prev + 1);
       }
     } else {
+      await submitPerformanceMetric(false);
       toast({
         title: "Incorrect",
         description: "Try again!",
@@ -54,6 +94,8 @@ export default function LessonPage() {
   }
 
   const exercise = exercises[currentExercise];
+  const difficulty = parseFloat(exercise.difficulty || "1.0");
+  const difficultyLabel = difficulty <= 0.7 ? "Easy" : difficulty >= 1.3 ? "Hard" : "Medium";
 
   return (
     <div className="min-h-screen bg-background">
@@ -64,7 +106,16 @@ export default function LessonPage() {
         <Card className="mb-4">
           <CardContent className="p-6">
             <div className="flex justify-between items-center mb-4">
-              <h1 className="text-2xl font-bold">{lesson.title}</h1>
+              <div>
+                <h1 className="text-2xl font-bold">{lesson.title}</h1>
+                <span className={`text-sm ${
+                  difficulty >= 1.3 ? 'text-red-500' : 
+                  difficulty <= 0.7 ? 'text-green-500' : 
+                  'text-yellow-500'
+                }`}>
+                  Difficulty: {difficultyLabel}
+                </span>
+              </div>
               {showShareDialog && (
                 <ShareAchievement
                   title={`Completed ${lesson.title}`}

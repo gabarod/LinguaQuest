@@ -7,6 +7,7 @@ import {
   timestamp,
   primaryKey,
   json,
+  decimal,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { relations } from "drizzle-orm";
@@ -38,6 +39,13 @@ export const exercises = pgTable("exercises", {
   question: text("question").notNull(),
   options: text("options").array(),
   correctAnswer: text("correct_answer").notNull(),
+  difficulty: decimal("difficulty").notNull().default("1.0"), // Scale from 0.0 to 2.0
+  skillType: text("skill_type").notNull(), // vocabulary, grammar, pronunciation, comprehension
+  adaptiveFactors: json("adaptive_factors").$type<{
+    timeWeight: number;
+    accuracyWeight: number;
+    attemptWeight: number;
+  }>().notNull(),
 });
 
 export const userProgress = pgTable("user_progress", {
@@ -128,6 +136,36 @@ export const userChallengeAttempts = pgTable("user_challenge_attempts", {
   pk: primaryKey({ columns: [table.userId, table.challengeId] }),
 }));
 
+export const performanceMetrics = pgTable("performance_metrics", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  exerciseId: integer("exercise_id")
+    .notNull()
+    .references(() => exercises.id),
+  accuracy: decimal("accuracy").notNull(),
+  responseTime: integer("response_time").notNull(), // in milliseconds
+  attemptCount: integer("attempt_count").notNull(),
+  timestamp: timestamp("timestamp").defaultNow(),
+});
+
+export const difficultyPreferences = pgTable("difficulty_preferences", {
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id)
+    .primaryKey(),
+  preferredLevel: text("preferred_level").notNull(), // beginner, intermediate, advanced
+  adaptiveMode: boolean("adaptive_mode").default(true),
+  lastAdjustment: timestamp("last_adjustment").defaultNow(),
+  skillLevels: json("skill_levels").$type<{
+    vocabulary: number;
+    grammar: number;
+    pronunciation: number;
+    comprehension: number;
+  }>().notNull(),
+});
+
 export const userRelations = relations(users, ({ many }) => ({
   progress: many(userProgress),
   stats: many(userStats),
@@ -192,6 +230,24 @@ export const userChallengeAttemptRelations = relations(userChallengeAttempts, ({
   challenge: one(dailyChallenges, {
     fields: [userChallengeAttempts.challengeId],
     references: [dailyChallenges.id],
+  }),
+}));
+
+export const performanceMetricsRelations = relations(performanceMetrics, ({ one }) => ({
+  user: one(users, {
+    fields: [performanceMetrics.userId],
+    references: [users.id],
+  }),
+  exercise: one(exercises, {
+    fields: [performanceMetrics.exerciseId],
+    references: [exercises.id],
+  }),
+}));
+
+export const difficultyPreferencesRelations = relations(difficultyPreferences, ({ one }) => ({
+  user: one(users, {
+    fields: [difficultyPreferences.userId],
+    references: [users.id],
   }),
 }));
 
