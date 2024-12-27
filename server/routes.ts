@@ -12,6 +12,7 @@ import multer from "multer";
 import { Readable } from "stream";
 import { pipeline } from "stream/promises";
 import { BuddyRecommendationService } from "./services/buddyRecommendationService";
+import { PronunciationService } from "./services/pronunciationService";
 
 // Add logging for flashcard operations
 const logFlashcardOperation = (operation: string, details: any) => {
@@ -41,46 +42,23 @@ export function registerRoutes(app: Express): Server {
     }
 
     try {
-      // Prepare the form data for the AI API
-      const formData = new FormData();
-      const audioBlob = new Blob([req.file.buffer], { type: req.file.mimetype });
-      formData.append("audio", audioBlob);
-      formData.append("text", req.body.text);
-      formData.append("language", req.body.language);
+      // Analyze pronunciation using Perplexity AI
+      const analysis = await PronunciationService.analyzePronunciation(
+        req.file.buffer,
+        req.body.text,
+        req.body.language
+      );
 
-      // Call the AI API for pronunciation analysis
-      const response = await fetch("https://api.perplexity.ai/audio/pronunciation", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${process.env.PERPLEXITY_API_KEY}`,
-        },
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
+      // Save metrics for tracking progress
+      if (req.body.exerciseId) {
+        await PronunciationService.savePronunciationMetrics(
+          userId,
+          parseInt(req.body.exerciseId),
+          analysis.score
+        );
       }
 
-      const analysis = await response.json();
-
-      // Process and format the analysis results
-      const feedback = {
-        score: analysis.score * 100,
-        feedback: analysis.feedback,
-        correctPhonemes: analysis.phonemes.correct,
-        incorrectPhonemes: analysis.phonemes.incorrect,
-      };
-
-      // Save the analysis results for tracking progress
-      await db.insert(userProgress).values({
-        userId,
-        type: "pronunciation",
-        score: feedback.score,
-        details: feedback,
-        completedAt: new Date(),
-      });
-
-      res.json(feedback);
+      res.json(analysis);
     } catch (error) {
       console.error("Error analyzing pronunciation:", error);
       res.status(500).send("Failed to analyze pronunciation");
@@ -966,6 +944,181 @@ export function registerRoutes(app: Express): Server {
     } catch (error) {
       console.error("Error generating conversation starters:", error);
       res.status(500).send("Failed to generate conversation starters");
+    }
+  });
+
+  // Add these routes after the existing authentication routes
+  // Generate flashcards
+  app.post("/api/flashcards/generate", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    const { text, language, count } = req.body;
+
+    try {
+      // Call Perplexity API to extract vocabulary and generate flashcards
+      const response = await fetch("https://api.perplexity.ai/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "llama-3.1-sonar-small-128k-online",
+          messages: [
+            {
+              role: "system",
+              content: `Extract ${count} most important vocabulary items from the text and create flashcards. 
+                       For each word provide: term, definition, context, and 2 example sentences.
+                       Format as JSON array.`
+            },
+            {
+              role: "user",
+              content: text
+            }
+          ],
+          temperature: 0.2
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const result = await response.json();
+      const flashcardsData = JSON.parse(result.choices[0].message.content);
+
+      // Save generated flashcards to database
+      const flashcardPromises = flashcardsData.map((card: any) =>
+        db.insert(flashcards).values({
+          userId,
+          term: card.term,
+          definition: card.definition,
+          context: card.context,
+          examples: card.examples,
+          language,
+          difficulty: 1.0,
+          lastReviewed: new Date(),
+          nextReview: new Date(Date.now() + 24 * 60 * 60 * 1000), // Review in 24 hours
+        })
+      );
+
+      await Promise.all(flashcardPromises);
+
+      res.json(flashcardsData);
+    } catch (error) {
+      console.error("Error generating flashcards:", error);
+      res.status(500).send("Failed to generate flashcards");
+    }
+  });
+
+  // Get user's flashcards
+  app.get("/api/flashcards", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    try {
+      const userFlashcards = await db
+        .select()
+        .from(flashcards)
+        .where(eq(flashcards.userId, userId))
+        .orderBy(desc(flashcards.createdAt));
+
+      res.json(userFlashcards);
+    } catch (error) {
+      console.error("Error fetching flashcards:", error);
+      res.status(500).send("Failed to fetch flashcards");
+    }
+  });
+
+  // Update flashcard progress
+  app.post("/api/flashcards/:id/progress", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    const { correct, responseTime } = req.body;
+    const flashcardId = parseInt(req.params.id);
+
+    try {
+      // Record progress
+      await db.insert(flashcardProgress).values({
+        userId,
+        flashcardId,
+        correct,
+        responseTime,
+      });
+
+      // Update flashcard difficulty and next review time based on performance
+      const [flashcard] = await db
+        .select()
+        .from(flashcards)
+        .where(
+          and(
+            eq(flashcards.id, flashcardId),
+            eq(flashcards.userId, userId)
+          )
+        );
+
+      if (flashcard) {
+        const newDifficulty = correct
+          ? Math.max(0.5, flashcard.difficulty - 0.1)
+          : Math.min(2.0, flashcard.difficulty + 0.2);
+
+        const nextReviewDelay = Math.round(
+          (correct ? 2 : 0.5) * // Base multiplier
+          (24 * 60 * 60 * 1000) * // One day in milliseconds
+          Math.pow(2, flashcard.proficiency || 0) * // Exponential spacing
+          newDifficulty // Adjusted by difficulty
+        );
+
+        await db
+          .update(flashcards)
+          .set({
+            difficulty: newDifficulty,
+            lastReviewed: new Date(),
+            nextReview: new Date(Date.now() + nextReviewDelay),
+            proficiency: sql`${flashcards.proficiency} + ${correct ? 1 : -1}`,
+          })
+          .where(eq(flashcards.id, flashcardId));
+      }
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error updating flashcard progress:", error);
+      res.status(500).send("Failed to update flashcard progress");
+    }
+  });
+
+  // Get due flashcards for review
+  app.get("/api/flashcards/review", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    try {
+      const dueFlashcards = await db
+        .select()
+        .from(flashcards)
+        .where(
+          and(
+            eq(flashcards.userId, userId),
+            lte(flashcards.nextReview, new Date())
+          )
+        )
+        .orderBy(desc(flashcards.nextReview))
+        .limit(20);
+
+      res.json(dueFlashcards);
+    } catch (error) {
+      console.error("Error fetching due flashcards:", error);
+      res.status(500).send("Failed to fetch due flashcards");
     }
   });
 
