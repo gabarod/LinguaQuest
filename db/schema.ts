@@ -7,9 +7,21 @@ import {
   timestamp,
   integer,
   jsonb,
+  decimal,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { relations } from "drizzle-orm";
+
+// Supported languages type
+export const supportedLanguages = [
+  "en",
+  "es",
+  "fr",
+  "de",
+  "it"
+] as const;
+
+export type SupportedLanguage = typeof supportedLanguages[number];
 
 // Basic tables for authentication and language support
 export const users = pgTable("users", {
@@ -59,22 +71,25 @@ export const sessionFeedback = pgTable("session_feedback", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Performance and difficulty tracking
+
+// Performance tracking and pronunciation specific tables
 export const performanceMetrics = pgTable("performance_metrics", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id).notNull(),
   type: text("type").notNull(), // pronunciation, grammar, vocabulary, etc.
-  score: integer("score").notNull(),
+  score: decimal("score", { precision: 5, scale: 2 }).notNull(),
   timestamp: timestamp("timestamp").defaultNow(),
 });
 
 export const pronunciationAttempts = pgTable("pronunciation_attempts", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").references(() => users.id).notNull(),
-  exerciseId: integer("exercise_id").references(() => exercises.id).notNull(),
+  exerciseId: integer("exercise_id").references(() => exercises.id),
+  targetText: text("target_text").notNull(),
+  language: text("language").notNull(),
   audioUrl: text("audio_url").notNull(),
   transcription: text("transcription"),
-  score: integer("score").notNull(),
+  score: decimal("score", { precision: 5, scale: 2 }).notNull(),
   feedback: jsonb("feedback"), // Detailed feedback from AI analysis
   createdAt: timestamp("created_at").defaultNow(),
 });
@@ -197,22 +212,116 @@ export const quizAttempts = pgTable("quiz_attempts", {
   completedAt: timestamp("completed_at").defaultNow(),
 });
 
-// User schema validation
-export const insertUserSchema = createInsertSchema(users, {
-  username: z.string().min(3, "Username must be at least 3 characters"),
-  password: z
-    .string()
-    .min(8, "Password must be at least 8 characters")
-    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
-    .regex(/[a-z]/, "Password must contain at least one lowercase letter")
-    .regex(/[0-9]/, "Password must contain at least one number")
-    .regex(/[^A-Za-z0-9]/, "Password must contain at least one special character"),
-  email: z.string().email("Invalid email address").optional(),
+// Learning path related tables
+export const learningPaths = pgTable("learning_paths", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  currentLevel: text("current_level").notNull(),
+  targetLevel: text("target_level").notNull(),
+  learningStyle: text("learning_style").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+export const skillProgression = pgTable("skill_progression", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  pathId: integer("path_id").references(() => learningPaths.id).notNull(),
+  skill: text("skill").notNull(), // vocabulary, grammar, pronunciation, etc.
+  level: integer("level").notNull(),
+  confidence: decimal("confidence", { precision: 5, scale: 2 }).notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const aiRecommendations = pgTable("ai_recommendations", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  pathId: integer("path_id").references(() => learningPaths.id).notNull(),
+  type: text("type").notNull(),
+  priority: integer("priority").notNull(),
+  reason: text("reason").notNull(),
+  metadata: jsonb("metadata").notNull(),
+  status: text("status").notNull().default('pending'),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Schema validation
+export const insertPronunciationAttemptSchema = createInsertSchema(pronunciationAttempts);
+export const selectPronunciationAttemptSchema = createSelectSchema(pronunciationAttempts);
+export const insertUserSchema = createInsertSchema(users);
 export const selectUserSchema = createSelectSchema(users);
 
 // Types
 export type SelectUser = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type User = Omit<SelectUser, "password">;
+export type InsertPronunciationAttempt = typeof pronunciationAttempts.$inferInsert;
+export type SelectPronunciationAttempt = typeof pronunciationAttempts.$inferSelect;
+
+// Daily challenges and gamification tables
+export const dailyChallenges = pgTable("daily_challenges", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  language: text("language").notNull(),
+  points: integer("points").notNull(),
+  questions: jsonb("questions").notNull(),
+  availableFrom: timestamp("available_from").notNull(),
+  availableUntil: timestamp("available_until").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const userChallengeAttempts = pgTable("user_challenge_attempts", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  challengeId: integer("challenge_id").references(() => dailyChallenges.id).notNull(),
+  score: integer("score").notNull(),
+  answers: jsonb("answers").notNull(),
+  completedAt: timestamp("completed_at").defaultNow(),
+});
+
+export const milestones = pgTable("milestones", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  type: text("type").notNull(), // achievement, skill, streak
+  points: integer("points").notNull(),
+  position: integer("position").notNull(),
+  requiredLessons: integer("required_lessons").notNull(),
+  requiredPoints: integer("required_points").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const userMilestones = pgTable("user_milestones", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  milestoneId: integer("milestone_id").references(() => milestones.id).notNull(),
+  unlockedAt: timestamp("unlocked_at").defaultNow(),
+});
+
+// Flashcard system tables
+export const flashcards = pgTable("flashcards", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  front: text("front").notNull(),
+  back: text("back").notNull(),
+  language: text("language").notNull(),
+  category: text("category").notNull(),
+  tags: text("tags").array(),
+  lastReviewed: timestamp("last_reviewed"),
+  nextReview: timestamp("next_review"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const flashcardProgress = pgTable("flashcard_progress", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  flashcardId: integer("flashcard_id").references(() => flashcards.id).notNull(),
+  easeFactor: decimal("ease_factor", { precision: 5, scale: 2 }).notNull().default("2.5"),
+  interval: integer("interval").notNull().default(1),
+  consecutiveCorrect: integer("consecutive_correct").notNull().default(0),
+  lastReviewedAt: timestamp("last_reviewed_at").defaultNow(),
+  nextReviewAt: timestamp("next_review_at").notNull(),
+});

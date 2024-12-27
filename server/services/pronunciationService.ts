@@ -1,6 +1,5 @@
-import { performanceMetrics, pronunciationAttempts, pronunciationMetrics } from "@db/schema";
+import { performanceMetrics, pronunciationAttempts } from "@db/schema";
 import { db } from "@db";
-import { decimal } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 interface PronunciationAnalysis {
@@ -91,7 +90,6 @@ export class PronunciationService {
   }
 
   private static calculateSimilarity(target: string, actual: string): number {
-    // Simple Levenshtein distance-based similarity
     const maxLength = Math.max(target.length, actual.length);
     const distance = this.levenshteinDistance(target, actual);
     return 1 - (distance / maxLength);
@@ -123,7 +121,6 @@ export class PronunciationService {
   }
 
   private static analyzePhonemes(target: string, actual: string): { correct: string[], incorrect: string[] } {
-    // Split words into phoneme-like units (simplified for example)
     const targetPhonemes = target.toLowerCase().split(' ');
     const actualPhonemes = actual.toLowerCase().split(' ');
 
@@ -143,8 +140,6 @@ export class PronunciationService {
 
   private static generateFeedback(analysisContent: string): string[] {
     const feedback: string[] = [];
-
-    // Extract feedback points from the analysis
     const sentences = analysisContent.split(/[.!?]+/).filter(s => s.trim().length > 0);
 
     sentences.forEach(sentence => {
@@ -154,7 +149,6 @@ export class PronunciationService {
       }
     });
 
-    // Add default feedback if none extracted
     if (feedback.length === 0) {
       feedback.push("Focus on clear pronunciation");
       feedback.push("Practice speaking at a comfortable pace");
@@ -165,8 +159,6 @@ export class PronunciationService {
 
   private static extractSuggestions(analysisContent: string): string[] {
     const suggestions: string[] = [];
-
-    // Extract specific suggestions from the analysis
     const sentences = analysisContent.split(/[.!?]+/).filter(s => s.trim().length > 0);
 
     sentences.forEach(sentence => {
@@ -184,77 +176,55 @@ export class PronunciationService {
     exerciseId: number | null,
     targetText: string,
     language: string,
-    analysis: PronunciationAnalysis
+    analysis: PronunciationAnalysis,
+    audioUrl: string
   ) {
-    const [attempt] = await db.insert(pronunciationAttempts).values({
-      userId,
-      exerciseId,
-      targetText,
-      language,
-      score: analysis.score.toString(),
-      feedback: {
-        overall: analysis.score,
-        phonemes: analysis.incorrectPhonemes.map(p => ({
-          phoneme: p,
-          score: 0, // Could be calculated more precisely
-          feedback: "Needs improvement"
-        })),
-        suggestions: analysis.suggestions
-      }
-    }).returning();
-
-    // Update overall metrics
-    await this.updatePronunciationMetrics(userId, language, analysis.score);
-
-    return attempt;
-  }
-
-  private static async updatePronunciationMetrics(
-    userId: number,
-    language: string,
-    score: number
-  ) {
-    const [existingMetrics] = await db
-      .select()
-      .from(pronunciationMetrics)
-      .where(sql`${pronunciationMetrics.userId} = ${userId} AND ${pronunciationMetrics.language} = ${language}`)
-      .limit(1);
-
-    if (existingMetrics) {
-      const newAverage = (existingMetrics.averageScore * existingMetrics.totalAttempts + score) / (existingMetrics.totalAttempts + 1);
-      const improvementRate = ((score - existingMetrics.averageScore) / existingMetrics.averageScore) * 100;
-
-      await db
-        .update(pronunciationMetrics)
-        .set({
-          averageScore: newAverage.toString(),
-          totalAttempts: existingMetrics.totalAttempts + 1,
-          improvementRate: improvementRate.toString(),
-          lastUpdated: new Date()
-        })
-        .where(sql`${pronunciationMetrics.id} = ${existingMetrics.id}`);
-    } else {
-      await db.insert(pronunciationMetrics).values({
+    try {
+      // Save pronunciation attempt
+      await db.insert(pronunciationAttempts).values({
         userId,
+        exerciseId,
+        targetText,
         language,
-        averageScore: score.toString(),
-        totalAttempts: 1,
-        lastUpdated: new Date()
+        audioUrl,
+        score: Number(analysis.score.toFixed(2)),
+        feedback: {
+          overall: analysis.score,
+          phonemes: analysis.incorrectPhonemes.map(p => ({
+            phoneme: p,
+            score: 0,
+            feedback: "Needs improvement"
+          })),
+          suggestions: analysis.suggestions
+        }
       });
+
+      // Update performance metrics
+      await db.insert(performanceMetrics).values({
+        userId,
+        type: 'pronunciation',
+        score: Number(analysis.score.toFixed(2))
+      });
+    } catch (error) {
+      console.error("Error saving pronunciation attempt:", error);
+      throw error;
     }
   }
+
   static async savePronunciationMetrics(
     userId: number,
     exerciseId: number,
     score: number
   ) {
-    await db.insert(performanceMetrics).values({
-      userId,
-      exerciseId,
-      accuracy: score.toString(),
-      responseTime: 0,
-      attemptCount: 1,
-      timestamp: new Date()
-    });
+    try {
+      await db.insert(performanceMetrics).values({
+        userId,
+        type: 'pronunciation',
+        score: Number(score.toFixed(2))
+      });
+    } catch (error) {
+      console.error("Error saving pronunciation metrics:", error);
+      throw error;
+    }
   }
 }
