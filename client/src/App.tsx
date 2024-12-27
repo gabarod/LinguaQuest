@@ -2,6 +2,8 @@ import { Switch, Route } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { useUser } from "@/hooks/use-user";
+import WelcomePage from "./pages/WelcomePage";
+import AuthPage from "./pages/AuthPage";
 
 function App() {
   const { user, isLoading } = useUser();
@@ -16,14 +18,11 @@ function App() {
 
   if (!user) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Card className="w-full max-w-md mx-4">
-          <CardContent className="pt-6 space-y-4">
-            <h1 className="text-2xl font-bold text-center">Welcome to LinguaQuest</h1>
-            <p className="text-center text-gray-600">Please log in to continue</p>
-          </CardContent>
-        </Card>
-      </div>
+      <Switch>
+        <Route path="/" component={WelcomePage} />
+        <Route path="/auth" component={AuthPage} />
+        <Route>{() => <WelcomePage />}</Route>
+      </Switch>
     );
   }
 
