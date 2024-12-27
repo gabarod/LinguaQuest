@@ -7,15 +7,10 @@ import AuthPage from "./pages/AuthPage";
 import HomePage from "./pages/HomePage";
 import LessonsPage from "./pages/LessonsPage";
 import LessonPage from "./pages/LessonPage";
-import GamesPage from "./pages/GamesPage";
+import ChatPage from "./pages/ChatPage";
+import BuddiesPage from "./pages/BuddiesPage";
 import LeaderboardPage from "./pages/LeaderboardPage";
-import LanguageExchangePage from "./pages/LanguageExchangePage";
-import CommunityPage from "./pages/CommunityPage";
-import { FlashcardsPage } from "./pages/FlashcardsPage";
 import { OnboardingTutorial } from "./components/OnboardingTutorial";
-import { ProgressCelebration } from "./components/ProgressCelebration";
-import QuizPage from "./pages/QuizPage";
-import PronunciationPractice from "./pages/PronunciationPractice";
 
 function App() {
   const { user, isLoading } = useUser();
@@ -39,23 +34,16 @@ function App() {
   }
 
   return (
-    <>
-      <Switch>
-        <Route path="/onboarding" component={OnboardingTutorial} />
-        <Route path="/" component={HomePage} />
-        <Route path="/lessons" component={LessonsPage} />
-        <Route path="/lesson/:id" component={LessonPage} />
-        <Route path="/flashcards" component={FlashcardsPage} />
-        <Route path="/games" component={GamesPage} />
-        <Route path="/leaderboard" component={LeaderboardPage} />
-        <Route path="/language-exchange" component={LanguageExchangePage} />
-        <Route path="/community" component={CommunityPage} />
-        <Route path="/quiz" component={QuizPage} />
-        <Route path="/pronunciation" component={PronunciationPractice} />
-        <Route component={NotFound} />
-      </Switch>
-      <ProgressCelebration />
-    </>
+    <Switch>
+      <Route path="/onboarding" component={OnboardingTutorial} />
+      <Route path="/" component={HomePage} />
+      <Route path="/lessons" component={LessonsPage} />
+      <Route path="/lesson/:id" component={LessonPage} />
+      <Route path="/chat" component={ChatPage} />
+      <Route path="/buddies" component={BuddiesPage} />
+      <Route path="/leaderboard" component={LeaderboardPage} />
+      <Route component={NotFound} />
+    </Switch>
   );
 }
 
