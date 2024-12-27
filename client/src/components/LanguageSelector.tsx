@@ -8,23 +8,22 @@ import {
 } from "@/components/ui/select";
 import {
   FaFlagUsa,
-  FaSpain,
-  FaFrench,
-  FaGerman,
-  FaItaly,
-  FaJapan,
-  FaKorea,
+  FaGlobeAmericas,
+  FaSun,
+  FaYinYang,
 } from "react-icons/fa";
 import { supportedLanguages } from "@db/schema";
 
 const languageIcons: Record<string, React.ReactNode> = {
   english: <FaFlagUsa className="h-4 w-4" />,
-  spanish: <FaSpain className="h-4 w-4" />,
-  french: <FaFrench className="h-4 w-4" />,
-  german: <FaGerman className="h-4 w-4" />,
-  italian: <FaItaly className="h-4 w-4" />,
-  japanese: <FaJapan className="h-4 w-4" />,
-  korean: <FaKorea className="h-4 w-4" />,
+  spanish: <FaGlobeAmericas className="h-4 w-4" />,
+  french: <FaGlobeAmericas className="h-4 w-4" />,
+  german: <FaGlobeAmericas className="h-4 w-4" />,
+  italian: <FaGlobeAmericas className="h-4 w-4" />,
+  portuguese: <FaGlobeAmericas className="h-4 w-4" />,
+  chinese: <FaYinYang className="h-4 w-4" />,
+  japanese: <FaSun className="h-4 w-4" />,
+  korean: <FaGlobeAmericas className="h-4 w-4" />,
 };
 
 const languageNames: Record<string, string> = {
@@ -33,6 +32,8 @@ const languageNames: Record<string, string> = {
   french: "Français",
   german: "Deutsch",
   italian: "Italiano",
+  portuguese: "Português",
+  chinese: "中文",
   japanese: "日本語",
   korean: "한국어",
 };

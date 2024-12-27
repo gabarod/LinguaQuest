@@ -8,6 +8,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Send } from "lucide-react";
+import { LanguageSelector } from "@/components/LanguageSelector";
+import { useUser } from "@/hooks/use-user";
 
 interface Message {
   id: string;
@@ -21,9 +23,11 @@ export default function ChatPage() {
   const [localMessages, setLocalMessages] = useState<Message[]>([]);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+  const { user } = useUser();
 
   const { data: messages = [], isLoading, refetch } = useQuery<Message[]>({
     queryKey: ["/api/chat/messages"],
+    enabled: !!user,
   });
 
   useEffect(() => {
@@ -46,6 +50,7 @@ export default function ChatPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content }),
+        credentials: "include",
       });
 
       if (!response.ok) {
@@ -55,7 +60,6 @@ export default function ChatPage() {
       return response.json();
     },
     onSuccess: (response) => {
-      // Add user message and assistant response to local state
       setLocalMessages(prev => [
         ...prev,
         {
@@ -93,8 +97,9 @@ export default function ChatPage() {
       <Navigation />
       <main className="container mx-auto p-4">
         <Card className="max-w-4xl mx-auto">
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Practice Chat</CardTitle>
+            <LanguageSelector />
           </CardHeader>
           <CardContent>
             <div className="flex flex-col h-[600px]">
