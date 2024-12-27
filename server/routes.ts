@@ -11,6 +11,7 @@ import { BuddyService } from "./services/buddyService";
 import { LanguageExchangeService } from "./services/languageExchangeService";
 import { PronunciationService } from "./services/pronunciationService";
 import multer from "multer";
+import learningPathRouter from "./routes/learningPath";
 
 export function registerRoutes(app: Express): Server {
   // Create HTTP server
@@ -985,7 +986,7 @@ export function registerRoutes(app: Express): Server {
           averageScore: sql<number>`avg(${userChallengeAttempts.score})`,
         })
         .from(userStats)
-                .innerJoin(users, eq(users.id, userStats.userId))
+        .innerJoin(users, eq(users.id, userStats.userId))
         .leftJoin(
           userChallengeAttempts,
           and(
@@ -1440,6 +1441,9 @@ export function registerRoutes(app: Express): Server {
       res.status(500).send("Failed to fetch user preferences");
     }
   });
+
+  // Register learning path routes
+  app.use(learningPathRouter);
 
   return httpServer;
 }

@@ -293,6 +293,63 @@ export const flashcardProgress = pgTable("flashcard_progress", {
   reviewedAt: timestamp("reviewed_at").defaultNow(),
 });
 
+export const learningPaths = pgTable("learning_paths", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  language: text("language").notNull(),
+  currentLevel: text("current_level").notNull(),
+  targetLevel: text("target_level").notNull(),
+  weeklyGoal: integer("weekly_goal").notNull(),
+  learningStyle: text("learning_style").notNull(),
+  interests: text("interests").array(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const aiRecommendations = pgTable("ai_recommendations", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  pathId: integer("path_id")
+    .notNull()
+    .references(() => learningPaths.id),
+  type: text("type").notNull(), // "lesson", "exercise", "practice", etc.
+  priority: integer("priority").notNull(),
+  reason: text("reason").notNull(),
+  status: text("status").notNull().default("pending"),
+  metadata: json("metadata").$type<{
+    skillFocus: string[];
+    estimatedTime: number;
+    difficulty: number;
+    prerequisites: number[];
+  }>(),
+  createdAt: timestamp("created_at").defaultNow(),
+  expiresAt: timestamp("expires_at"),
+});
+
+export const skillProgression = pgTable("skill_progression", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id")
+    .notNull()
+    .references(() => users.id),
+  pathId: integer("path_id")
+    .notNull()
+    .references(() => learningPaths.id),
+  skill: text("skill").notNull(),
+  level: decimal("level").notNull(),
+  confidence: decimal("confidence").notNull(),
+  lastAssessed: timestamp("last_assessed").notNull(),
+  history: json("history").$type<{
+    date: string;
+    level: number;
+    activity: string;
+  }[]>().default([]),
+});
+
+
 export const userRelations = relations(users, ({ many }) => ({
   progress: many(userProgress),
   stats: many(userStats),
@@ -301,6 +358,9 @@ export const userRelations = relations(users, ({ many }) => ({
   flashcards: many(flashcards),
   flashcardProgress: many(flashcardProgress),
   languages: many(userLanguages),
+  learningPaths: many(learningPaths),
+  recommendations: many(aiRecommendations),
+  skillProgression: many(skillProgression),
 }));
 
 export const lessonRelations = relations(lessons, ({ many }) => ({
@@ -438,6 +498,38 @@ export const flashcardProgressRelations = relations(flashcardProgress, ({ one })
   }),
 }));
 
+export const learningPathRelations = relations(learningPaths, ({ one, many }) => ({
+  user: one(users, {
+    fields: [learningPaths.userId],
+    references: [users.id],
+  }),
+  recommendations: many(aiRecommendations),
+  progression: many(skillProgression),
+}));
+
+export const aiRecommendationsRelations = relations(aiRecommendations, ({ one }) => ({
+  user: one(users, {
+    fields: [aiRecommendations.userId],
+    references: [users.id],
+  }),
+  path: one(learningPaths, {
+    fields: [aiRecommendations.pathId],
+    references: [learningPaths.id],
+  }),
+}));
+
+export const skillProgressionRelations = relations(skillProgression, ({ one }) => ({
+  user: one(users, {
+    fields: [skillProgression.userId],
+    references: [users.id],
+  }),
+  path: one(learningPaths, {
+    fields: [skillProgression.pathId],
+    references: [learningPaths.id],
+  }),
+}));
+
+
 export const insertUserSchema = createInsertSchema(users, {
   email: z.string().email("Invalid email address"),
   password: z
@@ -474,3 +566,21 @@ export type InsertDifficultyPreferences = z.infer<typeof insertDifficultyPrefere
 export type SelectDifficultyPreferences = typeof difficultyPreferences.$inferSelect;
 
 export const languageSchema = z.enum(supportedLanguages);
+
+export const insertLearningPathSchema = createInsertSchema(learningPaths);
+export const selectLearningPathSchema = createSelectSchema(learningPaths);
+
+export const insertAiRecommendationSchema = createInsertSchema(aiRecommendations);
+export const selectAiRecommendationSchema = createSelectSchema(aiRecommendations);
+
+export const insertSkillProgressionSchema = createInsertSchema(skillProgression);
+export const selectSkillProgressionSchema = createSelectSchema(skillProgression);
+
+export type InsertLearningPath = typeof learningPaths.$inferInsert;
+export type SelectLearningPath = typeof learningPaths.$inferSelect;
+
+export type InsertAiRecommendation = typeof aiRecommendations.$inferInsert;
+export type SelectAiRecommendation = typeof aiRecommendations.$inferSelect;
+
+export type InsertSkillProgression = typeof skillProgression.$inferInsert;
+export type SelectSkillProgression = typeof skillProgression.$inferSelect;
