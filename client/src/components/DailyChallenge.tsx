@@ -9,6 +9,7 @@ import { Flame, Trophy, Star, Timer } from "lucide-react";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { ShareAchievement } from "./ShareAchievement";
+import { CountdownTimer } from "./CountdownTimer";
 import { format } from "date-fns";
 
 interface Challenge {
@@ -24,6 +25,7 @@ interface Challenge {
   }[];
   completed?: boolean;
   score?: number;
+  availableUntil: string;
 }
 
 export function DailyChallenge() {
@@ -32,7 +34,7 @@ export function DailyChallenge() {
   const [selectedAnswers, setSelectedAnswers] = useState<string[]>([]);
   const [showResults, setShowResults] = useState(false);
 
-  const { data: challenge, isLoading } = useQuery<Challenge>({
+  const { data: challenge, isLoading, refetch } = useQuery<Challenge>({
     queryKey: ["/api/challenges/daily"],
   });
 
@@ -74,10 +76,19 @@ export function DailyChallenge() {
 
   const handleNext = () => {
     if (currentQuestionIndex < challenge!.questions.length - 1) {
-      setCurrentQuestionIndex((prev: number) => prev + 1);
+      setCurrentQuestionIndex((prev) => prev + 1);
     } else {
       submitMutation.mutate(selectedAnswers);
     }
+  };
+
+  const handleExpire = () => {
+    refetch();
+    toast({
+      title: "Desafío expirado",
+      description: "El tiempo para completar este desafío ha terminado. ¡Inténtalo de nuevo mañana!",
+      variant: "destructive",
+    });
   };
 
   if (isLoading) {
@@ -146,6 +157,10 @@ export function DailyChallenge() {
           </div>
         </div>
         <CardDescription>{challenge.description}</CardDescription>
+        <CountdownTimer
+          expiresAt={new Date(challenge.availableUntil)}
+          onExpire={handleExpire}
+        />
         <Progress value={progress} className="mt-2" />
       </CardHeader>
 
