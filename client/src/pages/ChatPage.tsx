@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Navigation } from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
@@ -18,11 +18,27 @@ interface Message {
 
 export default function ChatPage() {
   const [input, setInput] = useState("");
+  const [localMessages, setLocalMessages] = useState<Message[]>([]);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
 
   const { data: messages = [], isLoading, refetch } = useQuery<Message[]>({
     queryKey: ["/api/chat/messages"],
   });
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      setLocalMessages(messages);
+    }
+  }, [messages]);
+
+  useEffect(() => {
+    // Scroll to bottom when new messages arrive
+    if (scrollAreaRef.current) {
+      const scrollArea = scrollAreaRef.current;
+      scrollArea.scrollTop = scrollArea.scrollHeight;
+    }
+  }, [localMessages]);
 
   const sendMessage = useMutation({
     mutationFn: async (content: string) => {
@@ -38,9 +54,24 @@ export default function ChatPage() {
 
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (response) => {
+      // Add user message and assistant response to local state
+      setLocalMessages(prev => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          role: "user",
+          content: input,
+          timestamp: new Date(),
+        },
+        {
+          id: response.id,
+          role: "assistant",
+          content: response.content,
+          timestamp: new Date(response.timestamp),
+        },
+      ]);
       setInput("");
-      refetch();
     },
     onError: (error: Error) => {
       toast({
@@ -67,14 +98,17 @@ export default function ChatPage() {
           </CardHeader>
           <CardContent>
             <div className="flex flex-col h-[600px]">
-              <ScrollArea className="flex-1 pr-4">
+              <ScrollArea 
+                className="flex-1 pr-4"
+                ref={scrollAreaRef}
+              >
                 {isLoading ? (
                   <div className="flex justify-center py-8">
                     <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {messages.map((message) => (
+                    {localMessages.map((message) => (
                       <div
                         key={message.id}
                         className={`flex items-start gap-3 ${
@@ -97,6 +131,12 @@ export default function ChatPage() {
                         </div>
                       </div>
                     ))}
+                    {sendMessage.isPending && (
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <span>Typing...</span>
+                      </div>
+                    )}
                   </div>
                 )}
               </ScrollArea>
@@ -107,8 +147,12 @@ export default function ChatPage() {
                   onChange={(e) => setInput(e.target.value)}
                   placeholder="Type your message..."
                   disabled={sendMessage.isPending}
+                  className="flex-1"
                 />
-                <Button type="submit" disabled={sendMessage.isPending}>
+                <Button 
+                  type="submit" 
+                  disabled={sendMessage.isPending || !input.trim()}
+                >
                   {sendMessage.isPending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : (

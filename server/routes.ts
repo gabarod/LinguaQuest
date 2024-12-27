@@ -106,12 +106,12 @@ export function registerRoutes(app: Express): Server {
     }
 
     try {
-      // For now, return mock chat history
+      // For now, return initial greeting message
       const messages: ChatMessage[] = [
         {
           id: "1",
           role: "assistant",
-          content: "Hello! I'm your language learning assistant. How can I help you practice today?",
+          content: "¡Hola! Soy tu asistente de aprendizaje de idiomas. ¿Cómo puedo ayudarte a practicar hoy?",
           timestamp: new Date(),
         },
       ];
@@ -134,15 +134,57 @@ export function registerRoutes(app: Express): Server {
         return res.status(400).send("Message content is required");
       }
 
-      // Here we would normally call the AI service for response
-      const response: ChatMessage = {
+      // Get user's target language
+      const user = await db.query.users.findFirst({
+        where: eq(users.id, userId),
+      });
+
+      if (!user) {
+        return res.status(404).send("User not found");
+      }
+
+      // Call Perplexity API
+      const response = await fetch("https://api.perplexity.ai/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "llama-3.1-sonar-small-128k-online",
+          messages: [
+            {
+              role: "system",
+              content: `You are a helpful language learning assistant for ${user.targetLanguage}. 
+                       Provide brief, natural responses that help the user practice the language. 
+                       If the user writes in their native language, respond in the target language 
+                       and provide corrections when appropriate.`
+            },
+            {
+              role: "user",
+              content
+            }
+          ],
+          temperature: 0.7,
+          max_tokens: 150,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.statusText}`);
+      }
+
+      const perplexityResponse = await response.json();
+      const aiMessage = perplexityResponse.choices[0].message.content;
+
+      const chatResponse: ChatMessage = {
         id: Date.now().toString(),
         role: "assistant",
-        content: "I understand you're practicing English. Let me help you with that! What would you like to practice?",
+        content: aiMessage,
         timestamp: new Date(),
       };
 
-      res.json(response);
+      res.json(chatResponse);
     } catch (error) {
       logger.error("Error sending chat message:", error);
       res.status(500).send("Failed to send message");
