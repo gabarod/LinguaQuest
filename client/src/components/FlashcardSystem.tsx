@@ -48,6 +48,25 @@ interface Props {
   language: SupportedLanguage;
 }
 
+// Algoritmo de repetición espaciada (SRS)
+const calculateNextReview = (
+  difficulty: number,
+  proficiency: number,
+  lastReviewed?: string
+): Date => {
+  // Intervalos base en días según dificultad y proficiencia
+  const baseInterval = Math.pow(2, proficiency) * (1 + difficulty * 0.5);
+
+  // Si es la primera vez, comenzar con un intervalo corto
+  if (!lastReviewed) {
+    return new Date(Date.now() + 1000 * 60 * 60 * 24); // 1 día
+  }
+
+  const lastDate = new Date(lastReviewed);
+  const nextDate = new Date(lastDate.getTime() + baseInterval * 24 * 60 * 60 * 1000);
+  return nextDate;
+};
+
 export function FlashcardSystem({ language }: Props) {
   const [isCreating, setIsCreating] = useState(false);
   const [isReviewing, setIsReviewing] = useState(false);
@@ -104,7 +123,7 @@ export function FlashcardSystem({ language }: Props) {
     },
   });
 
-  // Mutación para revisar flashcard
+  // Mutación para revisar flashcard con SRS
   const reviewFlashcardMutation = useMutation({
     mutationFn: async ({
       id,
