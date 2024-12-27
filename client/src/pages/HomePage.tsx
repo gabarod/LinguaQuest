@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2 } from "lucide-react";
 import { useLocation } from "wouter";
+import type { Lesson } from "@/types";
 
 export default function HomePage() {
   const { user } = useUser();
@@ -58,7 +59,7 @@ export default function HomePage() {
 
           <ScrollArea className="h-[400px] w-full rounded-md border p-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {lessons?.map((lesson) => (
+              {lessons?.map((lesson: Lesson) => (
                 <LessonCard
                   key={lesson.id}
                   lesson={lesson}

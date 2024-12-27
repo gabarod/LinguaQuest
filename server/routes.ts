@@ -12,14 +12,15 @@ export function registerRoutes(app: Express): Server {
 
   // Get all lessons
   app.get("/api/lessons", async (req, res) => {
-    if (!req.user?.id) {
+    const userId = req.user?.id;
+    if (!userId) {
       return res.status(401).send("Not authenticated");
     }
 
     const allLessons = await db.query.lessons.findMany({
       with: {
         userProgress: {
-          where: eq(userProgress.userId, req.user.id),
+          where: eq(userProgress.userId, userId),
         },
       },
     });
@@ -29,7 +30,8 @@ export function registerRoutes(app: Express): Server {
 
   // Get specific lesson
   app.get("/api/lessons/:id", async (req, res) => {
-    if (!req.user?.id) {
+    const userId = req.user?.id;
+    if (!userId) {
       return res.status(401).send("Not authenticated");
     }
 
@@ -46,7 +48,8 @@ export function registerRoutes(app: Express): Server {
 
   // Get exercises for a lesson
   app.get("/api/lessons/:id/exercises", async (req, res) => {
-    if (!req.user?.id) {
+    const userId = req.user?.id;
+    if (!userId) {
       return res.status(401).send("Not authenticated");
     }
 
@@ -59,7 +62,8 @@ export function registerRoutes(app: Express): Server {
 
   // Complete a lesson
   app.post("/api/lessons/:id/complete", async (req, res) => {
-    if (!req.user?.id) {
+    const userId = req.user?.id;
+    if (!userId) {
       return res.status(401).send("Not authenticated");
     }
 
@@ -70,7 +74,7 @@ export function registerRoutes(app: Express): Server {
       await tx
         .insert(userProgress)
         .values({
-          userId: req.user.id,
+          userId,
           lessonId,
           completed: true,
           completedAt: new Date(),
@@ -89,7 +93,7 @@ export function registerRoutes(app: Express): Server {
         await tx
           .insert(userStats)
           .values({
-            userId: req.user.id,
+            userId,
             lessonsCompleted: 1,
             totalPoints: lesson.points,
             streak: 1,
@@ -112,12 +116,13 @@ export function registerRoutes(app: Express): Server {
 
   // Get user progress
   app.get("/api/progress", async (req, res) => {
-    if (!req.user?.id) {
+    const userId = req.user?.id;
+    if (!userId) {
       return res.status(401).send("Not authenticated");
     }
 
     const stats = await db.query.userStats.findFirst({
-      where: eq(userStats.userId, req.user.id),
+      where: eq(userStats.userId, userId),
     });
 
     res.json(stats || {
@@ -128,9 +133,10 @@ export function registerRoutes(app: Express): Server {
     });
   });
 
-  // New detailed progress endpoint
+  // Detailed progress endpoint
   app.get("/api/progress/detailed", async (req, res) => {
-    if (!req.user?.id) {
+    const userId = req.user?.id;
+    if (!userId) {
       return res.status(401).send("Not authenticated");
     }
 
@@ -141,10 +147,11 @@ export function registerRoutes(app: Express): Server {
           const date = subDays(new Date(), i);
           return db
             .select({
-              points: sql<number>`sum(${lessons.points})`,
+              points: sql<number>`coalesce(sum(${lessons.points}), 0)`,
               exercises: sql<number>`count(*)`,
             })
             .from(userProgress)
+            .leftJoin(lessons, eq(lessons.id, userProgress.lessonId))
             .where(sql`date(${userProgress.completedAt}) = ${format(date, 'yyyy-MM-dd')}`)
             .then(([result]) => ({
               day: format(date, 'EEE'),
@@ -162,12 +169,12 @@ export function registerRoutes(app: Express): Server {
         })
         .from(userProgress)
         .innerJoin(lessons, eq(lessons.id, userProgress.lessonId))
-        .where(eq(userProgress.userId, req.user.id))
+        .where(eq(userProgress.userId, userId))
         .groupBy(lessons.type);
 
       // Get user stats
       const stats = await db.query.userStats.findFirst({
-        where: eq(userStats.userId, req.user.id),
+        where: eq(userStats.userId, userId),
       });
 
       res.json({
