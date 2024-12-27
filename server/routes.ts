@@ -18,6 +18,58 @@ export function registerRoutes(app: Express): Server {
   // Use learning path router
   app.use(learningPathRouter);
 
+  // Get initial lessons
+  app.get("/api/lessons/initial", async (req, res) => {
+    try {
+      // Insert initial lessons if they don't exist
+      const initialLessons = [
+        {
+          title: "Basic Greetings",
+          description: "Learn essential greetings and introductions in English",
+          type: "conversation",
+          level: "beginner",
+          language: "english",
+          points: 100,
+          duration: 15,
+        },
+        {
+          title: "Common Phrases",
+          description: "Master everyday expressions and useful phrases",
+          type: "vocabulary",
+          level: "beginner",
+          language: "english",
+          points: 150,
+          duration: 20,
+        },
+        {
+          title: "Present Tense",
+          description: "Understanding and using the present tense in English",
+          type: "grammar",
+          level: "beginner",
+          language: "english",
+          points: 200,
+          duration: 25,
+        },
+      ];
+
+      for (const lesson of initialLessons) {
+        await db
+          .insert(lessons)
+          .values(lesson)
+          .onConflictDoNothing();
+      }
+
+      const allLessons = await db.query.lessons.findMany({
+        orderBy: [desc(lessons.points)],
+      });
+
+      res.json(allLessons);
+    } catch (error) {
+      console.error("Error setting up initial lessons:", error);
+      res.status(500).send("Failed to set up initial lessons");
+    }
+  });
+
   // Get all lessons
   app.get("/api/lessons", async (req, res) => {
     const userId = req.user?.id;

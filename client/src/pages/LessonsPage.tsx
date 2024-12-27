@@ -31,7 +31,7 @@ interface Lesson {
 export default function LessonsPage() {
   const [, setLocation] = useLocation();
   const { data: lessons = [], isLoading } = useQuery<Lesson[]>({
-    queryKey: ["/api/lessons"],
+    queryKey: ["/api/lessons/initial"],
   });
 
   const getLevelColor = (level: string) => {
@@ -65,9 +65,9 @@ export default function LessonsPage() {
       <Navigation />
       <main className="container mx-auto p-4">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Lecciones de Idiomas</h1>
+          <h1 className="text-3xl font-bold mb-2">Language Lessons</h1>
           <p className="text-muted-foreground">
-            Elige entre una variedad de lecciones para mejorar tus habilidades lingüísticas
+            Choose from a variety of lessons to improve your English skills
           </p>
         </div>
 
