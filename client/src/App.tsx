@@ -7,6 +7,7 @@ import { useUser } from "./hooks/use-user";
 import AuthPage from "./pages/AuthPage";
 import HomePage from "./pages/HomePage";
 import LessonPage from "./pages/LessonPage";
+import { OnboardingTutorial } from "./components/OnboardingTutorial";
 
 function App() {
   const { user, isLoading } = useUser();
@@ -20,11 +21,12 @@ function App() {
   }
 
   if (!user) {
-    return <AuthPage />;
+    return <OnboardingTutorial />; // Modified to show OnboardingTutorial for new users.
   }
 
   return (
     <Switch>
+      <Route path="/onboarding" component={OnboardingTutorial} />
       <Route path="/" component={HomePage} />
       <Route path="/lesson/:id" component={LessonPage} />
     </Switch>
