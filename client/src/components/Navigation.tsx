@@ -6,10 +6,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useLocation } from "wouter";
 import { Home, LogOut, User, Users, MessageCircle, Award, Book, Layout } from "lucide-react";
 import { LanguageSelector } from "./LanguageSelector";
+import { AvatarUpload } from "./AvatarUpload";
 
 export function Navigation() {
   const { user, logout } = useUser();
@@ -19,9 +19,6 @@ export function Navigation() {
     await logout();
     setLocation("/");
   };
-
-  // Safely get user initial, default to '?' if username is undefined
-  const userInitial = user?.username ? user.username.charAt(0).toUpperCase() : '?';
 
   return (
     <nav className="border-b">
@@ -59,37 +56,36 @@ export function Navigation() {
         {user && (
           <div className="flex items-center gap-4">
             <LanguageSelector />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                  <Avatar className="h-8 w-8">
-                    <AvatarFallback>
-                      {userInitial}
-                    </AvatarFallback>
-                  </Avatar>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem className="flex items-center gap-2">
-                  <User className="h-4 w-4" />
-                  <span>{user.username}</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => setLocation("/practice-sessions")}
-                  className="flex items-center gap-2"
-                >
-                  <Layout className="h-4 w-4" />
-                  <span>My Practice Sessions</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className="flex items-center gap-2 text-red-600"
-                  onClick={handleLogout}
-                >
-                  <LogOut className="h-4 w-4" />
-                  <span>Logout</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <div className="flex items-center">
+              <AvatarUpload />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="ml-2">
+                    <User className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem className="flex items-center gap-2">
+                    <User className="h-4 w-4" />
+                    <span>{user.username}</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => setLocation("/practice-sessions")}
+                    className="flex items-center gap-2"
+                  >
+                    <Layout className="h-4 w-4" />
+                    <span>My Practice Sessions</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="flex items-center gap-2 text-red-600"
+                    onClick={handleLogout}
+                  >
+                    <LogOut className="h-4 w-4" />
+                    <span>Logout</span>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
           </div>
         )}
       </div>

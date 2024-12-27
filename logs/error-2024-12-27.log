@@ -37,3 +37,16 @@
 2024-12-27 23:25:26:2526 [31merror[39m: [31mError fetching detailed progress: column language_progress.lesson_id does not exist[39m
 2024-12-27 23:25:26:2526 [31merror[39m: [31mError fetching progress: column "lesson_id" does not exist[39m
 2024-12-27 23:25:27:2527 [31merror[39m: [31mError fetching user stats: column "lesson_id" does not exist[39m
+2024-12-27 23:30:22:3022 [31merror[39m: [31mError fetching detailed progress: column language_progress.lesson_id does not exist[39m
+2024-12-27 23:30:22:3022 [31merror[39m: [31mError fetching progress: column "lesson_id" does not exist[39m
+2024-12-27 23:30:22:3022 [31merror[39m: [31mError fetching user stats: column "lesson_id" does not exist[39m
+2024-12-27 23:30:26:3026 [31merror[39m: [31mError updating user language: supportedLanguages is not defined[39m
+2024-12-27 23:30:30:3030 [31merror[39m: [31mError updating user language: supportedLanguages is not defined[39m
+2024-12-27 23:30:33:3033 [31merror[39m: [31mError updating user language: supportedLanguages is not defined[39m
+2024-12-27 23:30:37:3037 [31merror[39m: [31mError updating user language: supportedLanguages is not defined[39m
+2024-12-27 23:30:41:3041 [31merror[39m: [31mError updating user language: supportedLanguages is not defined[39m
+2024-12-27 23:30:48:3048 [31merror[39m: [31mError updating user language: supportedLanguages is not defined[39m
+2024-12-27 23:31:13:3113 [31merror[39m: [31mError updating user language: supportedLanguages is not defined[39m
+2024-12-27 23:31:15:3115 [31merror[39m: [31mError updating user language: supportedLanguages is not defined[39m
+2024-12-27 23:31:22:3122 [31merror[39m: [31mError updating user language: supportedLanguages is not defined[39m
+2024-12-27 23:31:22:3122 [31merror[39m: [31mError updating user language: supportedLanguages is not defined[39m

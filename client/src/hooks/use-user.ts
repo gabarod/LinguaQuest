@@ -16,10 +16,14 @@ type UpdateLanguageData = {
   language: string;
 };
 
+type UpdateAvatarData = {
+  avatarUrl: string;
+};
+
 async function handleRequest(
   url: string,
   method: string,
-  body?: LoginData | InsertUser | UpdateLanguageData
+  body?: LoginData | InsertUser | UpdateLanguageData | UpdateAvatarData
 ): Promise<RequestResult> {
   try {
     const response = await fetch(url, {
@@ -126,6 +130,15 @@ export function useUser() {
     },
   });
 
+  const updateAvatarMutation = useMutation<RequestResult, Error, string>({
+    mutationFn: (avatarUrl) => handleRequest('/api/user/avatar', 'POST', { avatarUrl }),
+    onSuccess: (data) => {
+      if (data.success && data.user) {
+        queryClient.setQueryData(['user'], data.user);
+      }
+    },
+  });
+
   return {
     user,
     isLoading,
@@ -134,5 +147,6 @@ export function useUser() {
     logout: logoutMutation.mutateAsync,
     register: registerMutation.mutateAsync,
     updateUserLanguage: updateLanguageMutation.mutateAsync,
+    updateAvatar: updateAvatarMutation.mutateAsync,
   };
 }

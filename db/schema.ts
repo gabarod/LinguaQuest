@@ -20,8 +20,7 @@ export const supportedLanguages = [
   'italian',
   'portuguese',
   'chinese',
-  'japanese',
-  'korean'
+  'japanese'
 ] as const;
 
 export type SupportedLanguage = typeof supportedLanguages[number];
@@ -33,7 +32,8 @@ export const users = pgTable("users", {
   email: text("email").unique(),
   password: text("password").notNull(),
   nativeLanguage: text("native_language").notNull(),
-  targetLanguage: text("target_language").notNull(),
+  targetLanguage: text("target_language").notNull().default('english'),
+  avatarUrl: text("avatar_url"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

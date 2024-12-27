@@ -8,22 +8,20 @@ import {
 } from "@/components/ui/select";
 import {
   FaFlagUsa,
-  FaGlobeAmericas,
-  FaSun,
-  FaYinYang,
+  FaFlag,
+  FaRegFlag,
 } from "react-icons/fa";
 import { supportedLanguages } from "@db/schema";
 
 const languageIcons: Record<string, React.ReactNode> = {
-  english: <FaFlagUsa className="h-4 w-4" />,
-  spanish: <FaGlobeAmericas className="h-4 w-4" />,
-  french: <FaGlobeAmericas className="h-4 w-4" />,
-  german: <FaGlobeAmericas className="h-4 w-4" />,
-  italian: <FaGlobeAmericas className="h-4 w-4" />,
-  portuguese: <FaGlobeAmericas className="h-4 w-4" />,
-  chinese: <FaYinYang className="h-4 w-4" />,
-  japanese: <FaSun className="h-4 w-4" />,
-  korean: <FaGlobeAmericas className="h-4 w-4" />,
+  english: <FaFlagUsa className="h-4 w-4 text-blue-600" />,
+  spanish: <FaFlag className="h-4 w-4 text-yellow-500" />,
+  french: <FaFlag className="h-4 w-4 text-blue-700" />,
+  german: <FaFlag className="h-4 w-4 text-yellow-400" />,
+  italian: <FaFlag className="h-4 w-4 text-green-600" />,
+  portuguese: <FaFlag className="h-4 w-4 text-green-700" />,
+  chinese: <FaFlag className="h-4 w-4 text-red-600" />,
+  japanese: <FaRegFlag className="h-4 w-4 text-red-500" />,
 };
 
 const languageNames: Record<string, string> = {
@@ -35,7 +33,6 @@ const languageNames: Record<string, string> = {
   portuguese: "Português",
   chinese: "中文",
   japanese: "日本語",
-  korean: "한국어",
 };
 
 export function LanguageSelector() {

@@ -490,5 +490,37 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
+  // Add avatar update route after the language update route
+  app.post("/api/user/avatar", async (req, res) => {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).send("Not authenticated");
+    }
+
+    try {
+      const { avatarUrl } = req.body;
+      if (!avatarUrl) {
+        return res.status(400).send("Avatar URL is required");
+      }
+
+      // Update user's avatar URL
+      const [updatedUser] = await db
+        .update(users)
+        .set({ avatarUrl })
+        .where(eq(users.id, userId))
+        .returning();
+
+      res.json({
+        success: true,
+        message: "Avatar updated successfully",
+        user: updatedUser,
+      });
+    } catch (error) {
+      logger.error("Error updating avatar:", error);
+      res.status(500).send("Failed to update avatar");
+    }
+  });
+
   return httpServer;
+
 }
