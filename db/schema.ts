@@ -275,6 +275,9 @@ export const flashcards = pgTable("flashcards", {
   lastReviewed: timestamp("last_reviewed"),
   nextReview: timestamp("next_review"),
   proficiency: integer("proficiency").default(0),
+  easeFactor: decimal("ease_factor").default("2.5"),
+  consecutiveCorrect: integer("consecutive_correct").default(0),
+  intervalDays: integer("interval_days").default(1),
   language: text("language").notNull(),
   tags: text("tags").array(),
   createdAt: timestamp("created_at").defaultNow(),
@@ -290,6 +293,9 @@ export const flashcardProgress = pgTable("flashcard_progress", {
     .references(() => flashcards.id),
   correct: boolean("correct").notNull(),
   responseTime: integer("response_time"),
+  quality: integer("quality").notNull(), // 0-5 rating of how well the answer was remembered
+  easeFactor: decimal("ease_factor").notNull(),
+  intervalDays: integer("interval_days").notNull(),
   reviewedAt: timestamp("reviewed_at").defaultNow(),
 });
 
@@ -529,7 +535,6 @@ export const skillProgressionRelations = relations(skillProgression, ({ one }) =
   }),
 }));
 
-
 export const insertUserSchema = createInsertSchema(users, {
   email: z.string().email("Invalid email address"),
   password: z
@@ -584,3 +589,27 @@ export type SelectAiRecommendation = typeof aiRecommendations.$inferSelect;
 
 export type InsertSkillProgression = typeof skillProgression.$inferInsert;
 export type SelectSkillProgression = typeof skillProgression.$inferSelect;
+
+// Add new schemas and types for flashcard spaced repetition
+export const flashcardQualitySchema = z.number().min(0).max(5);
+
+export interface SpacedRepetitionData {
+  easeFactor: number;
+  intervalDays: number;
+  nextReview: Date;
+  quality: number;
+}
+
+// Update flashcard schemas
+export const insertFlashcardSchema = createInsertSchema(flashcards);
+export const selectFlashcardSchema = createSelectSchema(flashcards);
+
+export const insertFlashcardProgressSchema = createInsertSchema(flashcardProgress, {
+  quality: z.number().min(0).max(5),
+});
+export const selectFlashcardProgressSchema = createSelectSchema(flashcardProgress);
+
+export type InsertFlashcard = typeof flashcards.$inferInsert;
+export type SelectFlashcard = typeof flashcards.$inferSelect;
+export type InsertFlashcardProgress = typeof flashcardProgress.$inferInsert;
+export type SelectFlashcardProgress = typeof flashcardProgress.$inferSelect;

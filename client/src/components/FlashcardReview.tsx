@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
-import { Loader2 } from "lucide-react";
+import { Loader2, ThumbsUp, ThumbsDown, Star, Clock } from "lucide-react";
 
 interface Flashcard {
   id: number;
@@ -21,6 +21,7 @@ export function FlashcardReview() {
   const [showAnswer, setShowAnswer] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [startTime, setStartTime] = useState<number>(0);
+  const [quality, setQuality] = useState<number>(0);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -31,17 +32,17 @@ export function FlashcardReview() {
   const progressMutation = useMutation({
     mutationFn: async ({ 
       flashcardId, 
-      correct, 
+      quality,
       responseTime 
     }: { 
       flashcardId: number; 
-      correct: boolean; 
+      quality: number;
       responseTime: number;
     }) => {
       const response = await fetch(`/api/flashcards/${flashcardId}/progress`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ correct, responseTime }),
+        body: JSON.stringify({ quality, responseTime }),
       });
 
       if (!response.ok) {
@@ -81,24 +82,25 @@ export function FlashcardReview() {
 
   const currentCard = flashcards[currentIndex];
 
-  const handleResponse = async (correct: boolean) => {
+  const handleResponse = async (selectedQuality: number) => {
     const responseTime = Date.now() - startTime;
-    
+
     try {
       await progressMutation.mutateAsync({
         flashcardId: currentCard.id,
-        correct,
+        quality: selectedQuality,
         responseTime,
       });
 
       setShowAnswer(false);
       setStartTime(Date.now());
+      setQuality(0);
 
       if (currentIndex < flashcards.length - 1) {
         setCurrentIndex(prev => prev + 1);
       } else {
         toast({
-          title: "Review Complete!",
+          title: "Review Complete! 🎉",
           description: "You've reviewed all your due flashcards.",
         });
       }
@@ -109,6 +111,14 @@ export function FlashcardReview() {
         description: "Failed to save progress",
       });
     }
+  };
+
+  const getQualityButtonClass = (q: number) => {
+    return `px-4 py-2 rounded-full transition-all ${
+      quality === q 
+        ? "bg-primary text-primary-foreground scale-110" 
+        : "bg-secondary hover:bg-secondary/80"
+    }`;
   };
 
   return (
@@ -127,13 +137,21 @@ export function FlashcardReview() {
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -20 }}
           transition={{ duration: 0.2 }}
+          className="min-h-[300px]"
         >
-          <Card className="min-h-[300px]">
+          <Card>
             <CardContent className="pt-6">
               <div className="space-y-4">
                 {!showAnswer ? (
                   <div className="text-center">
-                    <h3 className="text-2xl font-bold mb-4">{currentCard.term}</h3>
+                    <motion.h3 
+                      className="text-2xl font-bold mb-4"
+                      initial={{ scale: 0.9 }}
+                      animate={{ scale: 1 }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      {currentCard.term}
+                    </motion.h3>
                     {currentCard.context && (
                       <p className="text-muted-foreground italic">
                         Context: {currentCard.context}
@@ -151,13 +169,40 @@ export function FlashcardReview() {
                         <h4 className="font-semibold">Examples:</h4>
                         <ul className="list-disc list-inside space-y-2">
                           {currentCard.examples.map((example, i) => (
-                            <li key={i} className="text-muted-foreground">
+                            <motion.li
+                              key={i}
+                              initial={{ opacity: 0, x: -20 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: i * 0.1 }}
+                              className="text-muted-foreground"
+                            >
                               {example}
-                            </li>
+                            </motion.li>
                           ))}
                         </ul>
                       </div>
                     )}
+                    <div className="mt-6">
+                      <h4 className="font-semibold mb-3">How well did you know this?</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { value: 0, label: "Forgot", icon: ThumbsDown },
+                          { value: 3, label: "Hard", icon: Clock },
+                          { value: 4, label: "Good", icon: ThumbsUp },
+                          { value: 5, label: "Perfect", icon: Star },
+                        ].map(({ value, label, icon: Icon }) => (
+                          <Button
+                            key={value}
+                            variant="secondary"
+                            className={getQualityButtonClass(value)}
+                            onClick={() => setQuality(value)}
+                          >
+                            <Icon className="w-4 h-4 mr-2" />
+                            {label}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
@@ -171,26 +216,19 @@ export function FlashcardReview() {
           <Button
             size="lg"
             onClick={() => setShowAnswer(true)}
+            className="min-w-[200px]"
           >
             Show Answer
           </Button>
         ) : (
-          <>
-            <Button
-              variant="destructive"
-              size="lg"
-              onClick={() => handleResponse(false)}
-            >
-              Incorrect
-            </Button>
-            <Button
-              variant="default"
-              size="lg"
-              onClick={() => handleResponse(true)}
-            >
-              Correct
-            </Button>
-          </>
+          <Button
+            size="lg"
+            onClick={() => handleResponse(quality)}
+            disabled={quality === 0}
+            className="min-w-[200px]"
+          >
+            Next Card
+          </Button>
         )}
       </div>
     </div>
